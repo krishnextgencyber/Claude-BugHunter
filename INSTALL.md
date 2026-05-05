@@ -1,0 +1,185 @@
+# Installation Guide
+
+Step-by-step setup for the Claude-BugHunter skill bundle.
+
+## Prerequisites
+
+- **Claude Code** — install from https://claude.ai/download
+- **Burp Suite** Professional or Community — https://portswigger.net/burp
+- **macOS or Linux** — most steps are macOS-flavored; Linux users adjust paths
+- **Java** (for Burp MCP) — usually included with Burp Suite Pro
+- **Python 3.10+** (only if you want to regenerate skills via `public-skills-builder`)
+
+## Step 1 — Clone this repo
+
+```bash
+mkdir -p ~/Research
+cd ~/Research
+git clone https://github.com/elementalsouls/Claude-BugHunter.git
+cd Claude-BugHunter
+```
+
+## Step 2 — Run the installer
+
+```bash
+chmod +x scripts/install.sh
+./scripts/install.sh
+```
+
+This copies:
+- All 40 skills → `~/.claude/skills/`
+- All 15 slash commands → `~/.claude/commands/`
+- The `hunt` shell command → `~/.claude/scripts/hunt.sh` (sourced from your `.zshrc` or `.bashrc` automatically)
+
+Existing skills with the same name are backed up (e.g. `bugcrowd-reporting.backup-20260505-153000`) so re-runs are non-destructive.
+
+## Step 3 — Set up Burp MCP
+
+In Burp Suite:
+1. Go to **Extensions** → **BApp Store** → search for "MCP Server" → Install
+2. Confirm the **Output** tab shows: `Started MCP server on 127.0.0.1:9876`
+3. Note the path it extracted the proxy JAR to (typically `~/.BurpSuite/mcp-proxy/mcp-proxy-all.jar`)
+
+In your terminal:
+
+```bash
+claude mcp add burp -s user -- java -jar ~/.BurpSuite/mcp-proxy/mcp-proxy-all.jar
+```
+
+Verify in a fresh `claude` session:
+
+```
+/mcp
+```
+
+You should see `burp · ✓ connected`.
+
+## Step 4 — (Optional) Refresh vendored skills from upstream
+
+The bundle ships a frozen snapshot of shuvonsec's skills. To pull the latest from upstream and re-bundle:
+
+```bash
+chmod +x scripts/install-community-skills.sh
+./scripts/install-community-skills.sh
+```
+
+This clones `shuvonsec/claude-bug-bounty` into `~/Research/community-skills/` and runs its installer. Useful when you want fresher hunt patterns; not needed for first-time setup.
+
+## Step 5 — (Optional) Set up the skill regenerator
+
+If you want to regenerate `hunt-*` per-class skills from fresh disclosed HackerOne reports periodically:
+
+```bash
+cd ~/Research
+git clone https://github.com/shuvonsec/public-skills-builder.git
+cd public-skills-builder
+
+# Need Python 3.10+ — use Homebrew on macOS
+brew install python@3.12
+/opt/homebrew/bin/python3.12 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt 2>/dev/null || pip install anthropic httpx pydantic requests
+
+# Configure API keys
+cp .env.example .env
+# Edit .env:
+#   ANTHROPIC_API_KEY=sk-ant-...
+#   H1_API_KEY=your_h1_username:your_h1_token
+```
+
+> **Important**: Anthropic API and Claude Max are separate billing systems. Max gives you Claude Code access; the API is pay-per-token. You need both keys (`console.anthropic.com/billing` for the API key) to run the generator.
+
+Run the generator:
+
+```bash
+python3 public_skills_builder.py --source h1-public --program shopify --limit 200
+```
+
+Other H1 programs with high disclosed-report counts: `gitlab`, `hackerone`, `mail-ru`, `valve`, `uber`, `twitter`. The generator outputs flat `.md` files in `skills/` — you'll need to wrap each in its own folder structure (`hunt-name/SKILL.md`) before installing to `~/.claude/skills/`.
+
+### Known issues with public-skills-builder
+
+| Issue | Fix |
+|---|---|
+| `unsupported operand type: str \| None` | Python <3.10 — install 3.12 via Homebrew |
+| `Filter parameters must contain at least one program handle` | Add `--program <handle>` |
+| `Could not fetch ngalongc/bug-bounty-reference` | Hardcoded `master` branch URLs — patch script to try `main` first |
+
+## Step 6 — Smoke-test
+
+Open a fresh `claude` session in any folder:
+
+```bash
+claude
+```
+
+Try a hunt-class trigger test:
+
+```
+I have a reflected user input that's rendered into the page HTML — testing for XSS. What payloads should I try?
+```
+
+Expected: Claude triggers `hunt-xss` and walks you through detection patterns + payloads.
+
+Try the validation flow:
+
+```
+/triage
+```
+
+Then describe a hypothetical finding. Expected: Claude runs the 7-Question Gate.
+
+Try the engagement scaffold:
+
+```bash
+hunt acme-test
+ls ~/Targets/acme-test/
+```
+
+Expected: a complete folder with `CLAUDE.md`, `scope.md`, `findings/`, `evidence/`, `submissions.txt`, `notes.md`, `.gitignore`.
+
+If all three smoke tests pass, you're set up.
+
+## Step 7 — Cleanup
+
+Delete the test target:
+
+```bash
+rm -rf ~/Targets/acme-test
+```
+
+Then go find a real program and put it to work. See [USAGE.md](USAGE.md) for the full workflow walkthrough.
+
+## Troubleshooting
+
+| Symptom | Likely cause | Fix |
+|---|---|---|
+| `/mcp` doesn't show burp | Burp Suite not running, or extension not loaded | Re-open Burp, confirm Extensions tab shows MCP Server with "Loaded" checked |
+| `hunt: command not found` | Shell didn't pick up the `source` line | Restart your terminal, or `source ~/.zshrc` |
+| Skills don't trigger as expected | Description-field keyword mismatch | Mention the bug class explicitly in your prompt (e.g., "I'm testing IDOR on this endpoint") |
+| `burp - get_proxy_history_regex` returns empty | Burp's proxy history is empty for that target | Browse the target through Burp first to populate history |
+| Python build errors during step 5 | Using system Python 3.9 | Use Homebrew Python 3.12 explicitly: `/opt/homebrew/bin/python3.12 -m venv .venv` |
+
+## Uninstall
+
+To remove everything this repo installed:
+
+```bash
+# Remove all bundled skills (this removes EVERY skill in ~/.claude/skills,
+# including any you added manually — be selective if needed)
+# rm -rf ~/.claude/skills
+
+# Or remove only the originals contributed by this repo:
+rm -rf ~/.claude/skills/bugcrowd-reporting
+rm -rf ~/.claude/skills/evidence-hygiene
+
+# Remove all bundled commands
+# rm -rf ~/.claude/commands
+
+# Remove the hunt shell command
+rm -f ~/.claude/scripts/hunt.sh
+sed -i.bak '/claude\/scripts\/hunt.sh/d' ~/.zshrc
+
+# Remove Burp MCP entry
+claude mcp remove burp
+```
