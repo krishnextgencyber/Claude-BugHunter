@@ -1,7 +1,7 @@
 ---
 name: m365-entra-attack
-description: Microsoft 365 / Entra ID red-team attack chain — current 2026 reality. AADSTS code reference, user enumeration vectors (with hardening status), Smart Lockout math, Conditional Access bypass options, ROPC + SAML SSO browser flow, Burp/Playwright templates. Built from a paid external red-team engagement against a large Indian manufacturing conglomerate (May 2026) where ~2,000 ROPC attempts surfaced ~250 pre-existing lockouts, 1 valid CA-blocked credential, and confirmed real-time external attacker activity. Use for any M365/Entra credential attack, password spray, user enumeration, CA-bypass exploration, or active-attacker-detection scenario.
-sources: engagement-2026-05, microsoft-docs, AADInternals
+description: Microsoft 365 / Entra ID red-team attack chain — current 2026 reality. AADSTS code reference, user enumeration vectors (with hardening status), Smart Lockout math, Conditional Access bypass options, ROPC + SAML SSO browser flow, Burp/Playwright templates. Built from authorized red-team work where ROPC spray surfaced pre-existing lockouts and CA-blocked credentials, plus real-time external attacker activity correlation. Use for any M365/Entra credential attack, password spray, user enumeration, CA-bypass exploration, or active-attacker-detection scenario.
+sources: authorized-engagement, microsoft-docs, AADInternals
 report_count: 1
 ---
 
@@ -114,7 +114,7 @@ Host: <tenant>-my.sharepoint.com
 - Microsoft is hardening these endpoints over time — re-verify before relying on it
 - Some users may exist in Entra without OneDrive provisioning (license-dependent) — false negatives possible
 
-**2026-05-17 re-verification (engagement-2026-05 revalidation):** The OneDrive enum primitive STILL WORKS as of 2026-05-17. Calibration: licensed users return HTTP 200 with ~57KB body; nonexistent users / shared-mailbox accounts return 404 with 0 bytes. The /personal/ root path (without /_layouts/15/onedrive.aspx) returns the same differential.
+**2026-05-17 re-verification (authorized-engagement revalidation):** The OneDrive enum primitive STILL WORKS as of 2026-05-17. Calibration: licensed users return HTTP 200 with ~57KB body; nonexistent users / shared-mailbox accounts return 404 with 0 bytes. The /personal/ root path (without /_layouts/15/onedrive.aspx) returns the same differential.
 
 **Killer use case: license differential = account-class signal.** Cross-reference OneDrive 200/404 with ROPC AADSTS50034/50126:
 
@@ -126,7 +126,7 @@ Host: <tenant>-my.sharepoint.com
 | 404 | AADSTS50034 | Doesn't exist in tenant |
 | 404 | AADSTS50076 | Edge case (functional account WITH MFA enforced — rare) |
 
-The OneDrive-404 + ROPC-50126 combination is **the signal for "functional account that might bypass MFA"** — admins frequently exempt these from CA policies because they're used by automation that can't satisfy MFA. Discovered usefulness on engagement-2026-05 revalidation: identified `noreply@`, `purchase@`, `accounts@`, `postmaster@`, `transport@` as functional-account candidates (typical for any conglomerate tenant).
+The OneDrive-404 + ROPC-50126 combination is **the signal for "functional account that might bypass MFA"** — admins frequently exempt these from CA policies because they're used by automation that can't satisfy MFA. Discovered usefulness on authorized-engagement revalidation: identified `noreply@`, `purchase@`, `accounts@`, `postmaster@`, `transport@` as functional-account candidates (typical for any conglomerate tenant).
 
 **ROPC AADSTS50034 / AADSTS50126 differential:**
 - AADSTS50034 (user not exist) does NOT increment Smart Lockout counter
@@ -223,7 +223,7 @@ When CA policy requires MFA and ROPC cannot satisfy it, Entra returns an error b
 
 **The `"access_token"` substring appears inside the CA claims challenge JSON.** A loose substring check `if "access_token" in raw_body:` will false-positive every MFA-blocked attempt as a successful token issuance.
 
-**Always parse JSON, then check `if "access_token" in parsed_dict:`** — never substring-match on OAuth error bodies. This was discovered in the 2026-05-17 engagement-2026-05 revalidation where a substring check produced 7 false-positive "CA bypasses" on Sway/Yammer/Bookings/Tunnel client_ids that were actually all enforcing MFA correctly.
+**Always parse JSON, then check `if "access_token" in parsed_dict:`** — never substring-match on OAuth error bodies. This was discovered in the 2026-05-17 authorized-engagement revalidation where a substring check produced 7 false-positive "CA bypasses" on Sway/Yammer/Bookings/Tunnel client_ids that were actually all enforcing MFA correctly.
 
 The `claims.access_token.capolids` values are tenant-internal Conditional Access policy IDs — useful recon enrichment, but NOT a token. Document them in engagement notes as "CA policy IDs that fired" — they're a defender-side breadcrumb, not an attacker-side win.
 
@@ -299,7 +299,7 @@ This is the **highest-impact byproduct** of any M365 spray engagement. Always tr
 
 ---
 
-## Common password patterns to spray (Indian-conglomerate-specific)
+## Common password patterns to spray (multi-brand enterprise targets)
 
 - `<BrandName>@<Year>` — `<Brand>@2026`, `Tata@2026`
 - `<BrandName>@123` — `<Brand>@123` (very common)
@@ -333,7 +333,7 @@ These three artifacts are deliverable evidence for the report. They survive into
 
 ---
 
-## Real-world findings template (from engagement-2026-05)
+## Real-world findings template (from authorized-engagement)
 
 For the report:
 

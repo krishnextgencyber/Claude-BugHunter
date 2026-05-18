@@ -564,7 +564,7 @@ forge coverage --report summary
 ## Operator Notes (Claude-BugHunter)
 
 > Engagement-derived + 2026-specific additions to the vendored foundation.
-> Wisdom from real May-2026 paid engagements + Phase 2 verification across
+> Wisdom from real authorized engagements + Phase 2 verification across
 > this repo's 31+ skill-area live tests. The upstream content covers the WHAT;
 > this layer covers the WHEN-IT-WORKS-vs-WHEN-IT-DOESN'T.
 

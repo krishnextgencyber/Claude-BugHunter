@@ -333,7 +333,7 @@ A researcher who only checks "URL appears in response" would file an SSRF report
 
 ### Verdict
 
-**Gate documented and operationally proven** — the rule exists in `hunt-ssrf`, the historical case (May-2026 SharePoint engagement) confirms it would prevent a wrong call. We don't synthesize a Juice Shop FP for this; the documented case is the verification.
+**Gate documented and operationally proven** — the rule exists in `hunt-ssrf`, the historical case (authorized SharePoint engagement) confirms it would prevent a wrong call. We don't synthesize a Juice Shop FP for this; the documented case is the verification.
 
 ---
 

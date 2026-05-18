@@ -2,7 +2,7 @@
 
 A practical guide to using the 51-skill Claude-BugHunter bundle for bug hunting (bounty programs, authorized pentesting, CTFs, vuln research) **and external red-team engagements** against enterprise targets. This document covers what's in the bundle, how it composes, and how to use it on a real engagement from intake through paid bounty (or final client deliverable).
 
-> Built and validated through two paid engagements: a Bugcrowd engagement on a major financial target (exposed four bug-bounty capability gaps), and an external red-team engagement against a large Indian manufacturing conglomerate (May 2026 — exposed five additional gaps around platform attack chains, mid-engagement IR detection, and client-facing reporting). The final stack documented here addresses both modes.
+> Built and validated through authorized red-team and bug-bounty engagements — exposed four bug-bounty capability gaps and five additional gaps around platform attack chains, mid-engagement IR detection, and client-facing reporting. The final stack documented here addresses both modes.
 
 ---
 

@@ -207,7 +207,7 @@ curl "/files?ext=${GUID}.asmx"
 
 Same response for a filename that cannot possibly exist. Therefore the response is **policy-based, not state-based**. The blocklist returns "blocked" for ALL `.asmx` queries.
 
-**Verdict: KILL the oracle claim.** The skill rule prevented one N/A submission — exactly the type of FP that surfaced in a real engagement (`hunt-misc` line 212 documents this from the May-2026 SharePoint case).
+**Verdict: KILL the oracle claim.** The skill rule prevented one N/A submission — exactly the type of FP that surfaced in a real engagement (`hunt-misc` line 212 documents this from the authorized SharePoint case).
 
 ---
 

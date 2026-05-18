@@ -1,7 +1,7 @@
 ---
 name: redteam-report-template
-description: Client-facing red-team deliverable format — codifies the Subject / Observations / Description / Impact / Recommendation / PoC structure used for external red-team engagements (not bug-bounty platform reports). Different audience, different tone, different cadence. Built from a May-2026 engagement deliverable where 14 findings were packaged into a 52KB MD + 2.2MB DOCX with 16 embedded screenshots. Use when the engagement is "external red team for an enterprise client" (not H1/Bugcrowd/Intigriti), when generating the final report, when the client has specified a custom report format, or when packaging findings into DOCX/PDF.
-sources: engagement-2026-05-deliverable, enterprise-redteam-report-conventions
+description: Client-facing red-team deliverable format — codifies the Subject / Observations / Description / Impact / Recommendation / PoC structure used for external red-team engagements (not bug-bounty platform reports). Different audience, different tone, different cadence. Built from an authorized engagement deliverable where 14 findings were packaged into a 52KB MD + 2.2MB DOCX with 16 embedded screenshots. Use when the engagement is "external red team for an enterprise client" (not H1/Bugcrowd/Intigriti), when generating the final report, when the client has specified a custom report format, or when packaging findings into DOCX/PDF.
+sources: authorized-engagement-deliverable, enterprise-redteam-report-conventions
 report_count: 1
 ---
 
@@ -93,7 +93,7 @@ This is the field that distinguishes red-team deliverables from bug-bounty repor
 
 ---
 
-## Mistakes to avoid (from engagement-2026-05)
+## Mistakes to avoid (from authorized-engagement)
 
 ### 1. Don't retract findings that stopped reproducing
 If a finding was confirmed and then stopped working, that is almost always a CLIENT PATCH, not a finding-was-false. The correct response is "Confirmed; patched mid-engagement" with timestamps showing when it broke. See `mid-engagement-ir-detection`.
@@ -324,7 +324,7 @@ Pre-delivery checklist:
 
 ---
 
-## Real engagement metric (engagement-2026-05)
+## Real engagement metric (authorized-engagement)
 
 For calibration:
 - 14 findings shipped (2 Critical, 4 High, 5 Medium, 3 Low/Info)

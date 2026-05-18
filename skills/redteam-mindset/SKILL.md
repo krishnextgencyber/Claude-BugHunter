@@ -1,7 +1,7 @@
 ---
 name: redteam-mindset
-description: Red-team operator discipline — the mindset corrections that separate offensive testing from defensive WAPT. Built from a paid external red-team engagement (engagement-2026-05) where conservative defaults caused multiple findings to be missed and one to be incorrectly retracted. Use at the START of any red-team engagement and again whenever feeling stuck or considering "stopping" on a defended target. The single most important skill to load when scope is "external red team" not "bug bounty / WAPT".
-sources: engagement-2026-05
+description: Red-team operator discipline — the mindset corrections that separate offensive testing from defensive WAPT. Built from authorized red-team work where conservative defaults caused multiple findings to be missed and one to be incorrectly retracted. Use at the START of any red-team engagement and again whenever feeling stuck or considering "stopping" on a defended target. The single most important skill to load when scope is "external red team" not "bug bounty / WAPT".
+sources: authorized-engagement
 report_count: 1
 ---
 
@@ -52,7 +52,7 @@ Marker Discipline is about WHICH payloads to use (synthetic, identifiable, recov
 
 ### Self-throttling anti-patterns — flag immediately if you catch yourself doing any of these
 
-These all came out of a real engagement (engagement-2026-05 revalidation, 2026-05-17) where this skill *existed* and was *loaded* and the operator still self-throttled. The lesson is to make the failure modes explicit:
+These all came out of a real engagement (authorized-engagement revalidation, 2026-05-17) where this skill *existed* and was *loaded* and the operator still self-throttled. The lesson is to make the failure modes explicit:
 
 1. **Asking "want me to continue?" mid-run** after the user already chose Option D / full engagement / "go deep". The answer they gave at start IS the answer.
 2. **Stopping at first-class-returning-401/403.** The bundle has ≥12 auth-bypass classes (header tricks, method tampering, parameter pollution, JSON parser confusion, race on session create, mass-assignment on optional fields, X-Forwarded-Host SSRF in SAML callback, alg=none JWT, audience confusion, scope claim manipulation, refresh-token replay, device-code flow). Run them all per surface.
@@ -118,7 +118,7 @@ When you confirm a vuln on app A:
 4. **Document the class of vulnerability** — "vulnerability is in shared form-handler template across N apps", not just one finding.
 5. **Recommend class-fix** — fix the shared template, not just one app.
 
-The engagement-2026-05 case: SQLi confirmed on one sub-app (`<app-A>`); four sibling sub-apps (`<app-B>`, `<app-C>`, `<app-D>`, `<app-E>`) sit on the same employee-app host with similar form patterns — likely all share the same vulnerable template. Should have been a multi-app finding.
+The authorized-engagement case: SQLi confirmed on one sub-app (`<app-A>`); four sibling sub-apps (`<app-B>`, `<app-C>`, `<app-D>`, `<app-E>`) sit on the same employee-app host with similar form patterns — likely all share the same vulnerable template. Should have been a multi-app finding.
 
 ---
 
@@ -383,5 +383,5 @@ This skill is the operational discipline; those are the techniques.
 - **`hunt-dispatch`** — Once mindset is loaded, the `/hunt` command needs a mode answer (redteam vs wapt, blackbox vs greybox) before it routes to platform-specific skills. Engagement flow: red-team mindset triggered → confirm engagement mode (`bug-bounty` vs red-team vs pentest per project memory) → invoke `/hunt` → `hunt-dispatch` loads the right cluster (M365 / SharePoint / VPN / vCenter / APK).
 - **`mid-engagement-ir-detection`** — Red-team mindset says "behavior changes ARE findings"; this skill operationalizes that. Engagement flow: red-team engagement underway → baseline established at session start → response patterns shift mid-test → `mid-engagement-ir-detection` captures the SOC-patch state as a NEW finding (defensive-action observed = client capability metric). Don't dismiss it as "the bug got fixed."
 - **`redteam-report-template`** — Red-team deliverable is NOT a bug-bounty report; different audience, different tone, different cadence. Engagement flow: findings collected throughout engagement → at session close, package via `redteam-report-template` (Subject / Observations / Description / Impact / Recommendation / PoC) for client-facing DOCX, not `report-writing` which is for H1/Bugcrowd/Intigriti platforms.
-- **`triage-validation`** — Red-team mindset includes "don't retract too fast" — the 4 retractions from a May-2026 engagement were mindset failures, not validation failures. Engagement flow: every finding through `triage-validation` 7-Question Gate, but with the red-team adjustment that "exploitable only with chain" is still a finding, not a no-finding.
+- **`triage-validation`** — Red-team mindset includes "don't retract too fast" — the 4 retractions from an authorized engagement were mindset failures, not validation failures. Engagement flow: every finding through `triage-validation` 7-Question Gate, but with the red-team adjustment that "exploitable only with chain" is still a finding, not a no-finding.
 - **`evidence-hygiene`** — Red-team engagements often span weeks; without disciplined evidence capture the deliverable suffers. Engagement flow: red-team mindset triggered → set up `evidence-hygiene` capture cadence (screenshots, request/response dumps, timestamped logs) at session start, not at session close.

@@ -8,7 +8,7 @@ The Claude-BugHunter bundle maps to a 6-phase workflow that supports both bug hu
 
 ![architecture overview](../assets/architecture-overview.svg)
 
-> The architecture SVG still shows the original 40-skill / 24-hunt-* view from before the May-2026 red-team expansion. The hunt count happens to match again after dedup, but the SVG is missing the enterprise-platform and red-team-tradecraft layers. Refresh is in the roadmap.
+> The architecture SVG still shows the original 40-skill / 24-hunt-* view from before the red-team-skill expansion. The hunt count happens to match again after dedup, but the SVG is missing the enterprise-platform and red-team-tradecraft layers. Refresh is in the roadmap.
 
 The "Source" column in the per-phase tables below tags each skill: **`original`** = author's work in this repo, `vendored` = from [shuvonsec/claude-bug-bounty](https://github.com/shuvonsec/claude-bug-bounty) (MIT). 46 of 51 skills are original; 8 are vendored.
 

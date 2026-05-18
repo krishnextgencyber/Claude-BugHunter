@@ -21,6 +21,10 @@ evidence/
 *.jpeg
 *.mp4
 *.mov
+# …but allow display assets under assets/ (banner, diagrams)
+!assets/*.png
+!assets/*.jpg
+!assets/*.jpeg
 findings/
 submissions.txt
 notes.md

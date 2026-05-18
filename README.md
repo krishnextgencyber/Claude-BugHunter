@@ -1,8 +1,8 @@
-![claude-bughunter banner](assets/banner.svg)
+![claude-bughunter banner](assets/banner.png)
 
 # claude-bughunter
 
-> A self-contained Claude skill bundle for bug hunting and external red-team work · **51 skills** · 15 slash commands · **574+ disclosed-report patterns** across 24 vulnerability classes · enterprise identity + infrastructure attack matrices · engagement-folder scaffolding · Burp MCP integration · battle-tested through Bugcrowd financial-target work AND a paid external red-team engagement against an Indian conglomerate (May 2026).
+> A self-contained Claude skill bundle for bug hunting and external red-team work · **51 skills** · 15 slash commands · **574+ disclosed-report patterns** across 24 vulnerability classes · enterprise identity + infrastructure attack matrices · engagement-folder scaffolding · Burp MCP integration · battle-tested across authorized red-team and bug-bounty engagements, plus public training platforms (DVWA, OWASP Juice Shop, Hacker101, testphp.vulnweb.com).
 
 Built by **[ElementalSoul](https://github.com/elementalsouls)** — Bug Bounty & GenAI Security Research.
 
@@ -21,7 +21,7 @@ Four layers stack:
 
 All triggered automatically by topic — describe what you're testing in plain English and the relevant skill loads. No invocation by name.
 
-> **51 skills · 15 commands · 574+ disclosed reports curated · 6-phase workflow · exercised against public training platforms (DVWA, OWASP Juice Shop, Hacker101, testphp.vulnweb.com) and calibrated through real authorized engagements (Bugcrowd financial-target work + a paid external red-team engagement, May 2026).**
+> **51 skills · 15 commands · 574+ disclosed reports curated · 6-phase workflow · exercised against public training platforms (DVWA, OWASP Juice Shop, Hacker101, testphp.vulnweb.com) and calibrated through authorized real-world engagements.**
 
 ---
 
@@ -291,7 +291,7 @@ Claude-BugHunter/
 │   ├── cbh.py                               # terminal-native CLI runner
 │   └── refresh-cve-index.py                 # CISA KEV refresh against in-scope vendors
 ├── docs/                                    # architecture · credits · CLI reference · CVE coverage · pattern libraries · verification labs
-├── assets/                                  # banner + architecture / capability-map / engagement-flow SVGs
+├── assets/                                  # banner PNG + architecture / capability-map / engagement-flow SVGs
 └── README.md · INSTALL.md · USAGE.md · CONTRIBUTING.md · SECURITY.md · LICENSE
 ```
 
@@ -334,7 +334,7 @@ If none of the above match: tell Claude *"I want to test for X"* (where X is the
 
 | Skill | What it covers | Coverage source |
 |---|---|---|
-| `hunt-aspnet` | **ASP.NET ViewState · machineKey · WebForms · WCF · request-validator bypass** | engagement-2026-05 |
+| `hunt-aspnet` | **ASP.NET ViewState · machineKey · WebForms · WCF · request-validator bypass** | authorized-engagement |
 | `hunt-csrf` | Cross-site request forgery (chain-required impact) | 10 H1 reports |
 | `hunt-file-upload` | File upload bypass — 10 techniques (double-ext, magic-bytes, polyglot, ZIP slip, SVG XSS) | curated |
 | `hunt-idor` | IDOR / broken object-level authorization · cross-tenant access | 26 H1 reports |
@@ -380,25 +380,25 @@ If none of the above match: tell Claude *"I want to test for X"* (where X is the
 | Skill | What it covers | Coverage source |
 |---|---|---|
 | `cloud-iam-deep` | Cloud IAM priv-esc — AWS (24+), Azure (8+), GCP (6+) patterns · STS chaining · IMDS · K8s SA tokens · confused-deputy | original |
-| `m365-entra-attack` | M365 / Entra ID — AADSTS codes, user enum, Smart Lockout math, CA bypass, ROPC, SAML SSO browser flow | engagement-2026-05 |
+| `m365-entra-attack` | M365 / Entra ID — AADSTS codes, user enum, Smart Lockout math, CA bypass, ROPC, SAML SSO browser flow | authorized-engagement |
 | `okta-attack` | Okta-as-IdP — tenant discovery, user enum vectors, factor enumeration, push-fatigue, FastPass abuse, OIDC redirect_uri tampering | original |
 
 ### Infrastructure & Appliance Attack ★ (4 skills)
 
 | Skill | What it covers | Coverage source |
 |---|---|---|
-| `enterprise-vpn-attack` | Enterprise SSL VPN — Cisco ASA/AnyConnect · Fortinet · Citrix NetScaler · Palo Alto · Pulse/Ivanti · SonicWall · F5 | engagement-2026-05 |
-| `hunt-ntlm-info` | NTLM/Negotiate anonymous Type-2 disclosure — AV_PAIRS leakage, internal DNS forest, default WIN-XXX hostnames | engagement-2026-05 |
-| `hunt-sharepoint` | SharePoint on-prem (2013–SE) — ToolShell precondition chain (CVE-2025-53770), SOAP auth bypass, anon FormDigest, SafeControl enum | engagement-2026-05 |
+| `enterprise-vpn-attack` | Enterprise SSL VPN — Cisco ASA/AnyConnect · Fortinet · Citrix NetScaler · Palo Alto · Pulse/Ivanti · SonicWall · F5 | authorized-engagement |
+| `hunt-ntlm-info` | NTLM/Negotiate anonymous Type-2 disclosure — AV_PAIRS leakage, internal DNS forest, default WIN-XXX hostnames | authorized-engagement |
+| `hunt-sharepoint` | SharePoint on-prem (2013–SE) — ToolShell precondition chain (CVE-2025-53770), SOAP auth bypass, anon FormDigest, SafeControl enum | authorized-engagement |
 | `vmware-vcenter-attack` | VMware vSphere / vCenter / Workspace ONE / Aria CVE chain (CVE-2021-21972 → CVE-2024-37085) | original |
 
 ### Red Team Tradecraft ★ (4 skills)
 
 | Skill | What it covers | Coverage source |
 |---|---|---|
-| `apk-redteam-pipeline` | Android APK red-team pipeline — Play Store + apkpure acquisition, jadx decompile, secret/JWT/Firebase grep, Frida templates | engagement-2026-05 |
-| `mid-engagement-ir-detection` | Mid-engagement IR detection — SOC patches mid-test, external attacker activity, baseline-shift detection | engagement-2026-05 |
-| `redteam-mindset` | Red-team operator discipline — mindset corrections separating offensive from defensive WAPT, "DO NOT STOP" primary directive | engagement-2026-05 |
+| `apk-redteam-pipeline` | Android APK red-team pipeline — Play Store + apkpure acquisition, jadx decompile, secret/JWT/Firebase grep, Frida templates | authorized-engagement |
+| `mid-engagement-ir-detection` | Mid-engagement IR detection — SOC patches mid-test, external attacker activity, baseline-shift detection | authorized-engagement |
+| `redteam-mindset` | Red-team operator discipline — mindset corrections separating offensive from defensive WAPT, "DO NOT STOP" primary directive | authorized-engagement |
 | `supply-chain-attack-recon` | Supply-chain recon — dep-confusion, GH Actions injection, SBOM mining, container registry exposure, internal-package leakage | original |
 
 ### Recon & OSINT (4 skills)
@@ -426,7 +426,7 @@ If none of the above match: tell Claude *"I want to test for X"* (where X is the
 |---|---|---|
 | `bugcrowd-reporting` | Bugcrowd VRT category fallback · severity-request paragraph · OOS rebuttals · chained-finding patterns | original |
 | `evidence-hygiene` | Cookie redaction · PII black-bar · HAR sanitization · screenshot hygiene | original |
-| `redteam-report-template` ★ | Client-facing red-team deliverable — Subject / Observations / Description / Impact / Recommendation / PoC, MD + DOCX packaging | engagement-2026-05 |
+| `redteam-report-template` ★ | Client-facing red-team deliverable — Subject / Observations / Description / Impact / Recommendation / PoC, MD + DOCX packaging | authorized-engagement |
 | `report-writing` | H1 / Bugcrowd / Intigriti / Immunefi templates · CVSS 3.1 + 4.0 | original |
 
 ### Specialized (2 skills)
@@ -463,7 +463,7 @@ You type these directly into Claude Code. They route to the right skills automat
 **Reading the columns:**
 - **Skill** — the exact identifier (matches the folder name in `~/.claude/skills/`)
 - **What it covers** — one-line summary; full content is in the skill's `SKILL.md`
-- **Coverage source** — where the patterns came from: an H1 report count (curated from public disclosures), `curated` (hand-assembled from research), `original` (author-written), `vendored` (upstream community skill), or `engagement-2026-05` (derived from a paid external red-team engagement)
+- **Coverage source** — where the patterns came from: an H1 report count (curated from public disclosures), `curated` (hand-assembled from research), `original` (author-written), `vendored` (upstream community skill), or `authorized-engagement` (derived from authorized red-team work)
 - **★** marks a skill that's newer and worth flagging for established hunters who may not have its specific coverage yet
 
 ---
@@ -699,16 +699,16 @@ The bundle explicitly **excludes**: weaponizing 0-days against unauthorized targ
 
 Most bug-hunting Claude setups are either too generic (one big "security" prompt) or too fragmented (you bookmark 30 disclosed reports and re-read them every engagement). Neither scales past the second target.
 
-This bundle was built and validated through two paid engagements that exposed different capability gaps:
+This bundle was built and validated through authorized engagements that exposed different capability gaps:
 
-**Bugcrowd financial target** — surfaced four gaps a starter 3-skill stack could not close:
+**Bug-bounty engagement** — surfaced four gaps a starter 3-skill stack could not close:
 
 1. **No hypothesis discipline** — drafts written before validation → wasted hours, hurt validity ratio
 2. **No per-program reporting tactics** — VRT defaults auto-downgraded P3-worthy findings to P4
 3. **No engagement coordination** — findings, evidence, and submission IDs scattered across folders
 4. **No evidence hygiene** — screenshots leaked cookies and victim PII
 
-**External red-team — large Indian manufacturing conglomerate (May 2026)** — exposed five additional gaps that bug-bounty defaults made worse:
+**External red-team engagement** — exposed five additional gaps that bug-bounty defaults made worse:
 
 1. **Conservative defaults retracted real findings** — WAPT mindset stopped tests early on defended targets where red-team continuation would have surfaced bypass chains → `redteam-mindset`
 2. **No mid-engagement situational awareness** — client SOC patched confirmed SQLi within 30 min; external attacker locked 14 accounts during a live test session — both invisible without explicit detection methodology → `mid-engagement-ir-detection`

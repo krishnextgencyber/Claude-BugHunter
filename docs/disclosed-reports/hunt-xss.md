@@ -124,7 +124,7 @@ XSS pays when it combines privileged context (admin UI, billing flow, SSO callba
 ### WAF rejection on `<` claimed as "filter bypass needed"
 - **Looks like:** ASP.NET request validator or a WAF returns 500 / 403 on a payload containing `<`. Operator wants to find a bypass.
 - **Actually is:** The framework is blocking *input*, not *output*. The data never reaches the application's output path. Finding an alternative-character bypass doesn't make this XSS; it just lets the request through to be safely encoded later.
-- **How to disprove:** Find an input that *does* reach output unencoded (a header, a different parameter, a cookie). If every payload route gets encoded on output, it's a hardened app, not a bypassable one. Lesson reference (May-2026 SharePoint engagement): request validator blocks `<` before storage; encoding bypasses do not help.
+- **How to disprove:** Find an input that *does* reach output unencoded (a header, a different parameter, a cookie). If every payload route gets encoded on output, it's a hardened app, not a bypassable one. Lesson reference (authorized SharePoint engagement): request validator blocks `<` before storage; encoding bypasses do not help.
 
 ### Natural-language collision in response body
 - **Looks like:** You submitted `xsstest123` as the payload and observe `xsstest123` in the response body. Looks reflected.

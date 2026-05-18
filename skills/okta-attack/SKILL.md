@@ -177,7 +177,7 @@ Discipline:
 
 If a valid password is obtained and `push` factor is available, the classic attack: hammer the push factor until the user accepts out of fatigue.
 
-⚠ **OUT OF SCOPE in most red-team engagements** (counts as social engineering / phishing — e.g. phishing was explicitly OOS for engagement-2026-05). Document the vector existence but do not execute without explicit sign-off.
+⚠ **OUT OF SCOPE in most red-team engagements** (counts as social engineering / phishing — e.g. phishing was explicitly OOS for authorized-engagement). Document the vector existence but do not execute without explicit sign-off.
 
 ### Detection-only check (does target allow it?)
 ```bash

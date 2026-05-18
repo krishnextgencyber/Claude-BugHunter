@@ -1,7 +1,7 @@
 ---
 name: apk-redteam-pipeline
-description: End-to-end Android APK red-team pipeline — automated APK acquisition (Play Store + apkpure + apkmirror fallback), jadx decompilation, secret/URL/JWT/Firebase grep, pinned-cert extraction, exported-component enumeration, Frida runtime instrumentation templates, intent-injection probes. Built from a May-2026 external red-team engagement where 7 APKs were pulled manually, 4 download attempts truncated, and a hardcoded JWT + 30 internal API endpoints were recovered from one of the apps. Use when target has a mobile app catalogue (Play Store developer page), when you find an APK URL hosted on a web server, or when post-recon mentions "mobile app" in scope.
-sources: engagement-2026-05
+description: End-to-end Android APK red-team pipeline — automated APK acquisition (Play Store + apkpure + apkmirror fallback), jadx decompilation, secret/URL/JWT/Firebase grep, pinned-cert extraction, exported-component enumeration, Frida runtime instrumentation templates, intent-injection probes. Built from an authorized external red-team engagement where 7 APKs were pulled manually, 4 download attempts truncated, and a hardcoded JWT + 30 internal API endpoints were recovered from one of the apps. Use when target has a mobile app catalogue (Play Store developer page), when you find an APK URL hosted on a web server, or when post-recon mentions "mobile app" in scope.
+sources: authorized-engagement
 report_count: 1
 ---
 
@@ -46,7 +46,7 @@ com.<corp>.<sub-brand-3>
 ### Cross-reference with stealer logs
 Stealer-log format includes package names like `*@com.<corp>.<app>` — extract these from `creds_userpass.txt` if you have a leaked dump.
 
-### Brand permutation guesses (Indian conglomerate patterns)
+### Brand permutation guesses (multi-brand conglomerate patterns)
 ```
 com.<brand>.app
 com.<brand>.mobile  
@@ -167,7 +167,7 @@ grep -oE 'client_secret["\s:=]+[A-Za-z0-9_-]{24,}' strings_<package>.txt
 grep -oE '"password"\s*:\s*"[^"]+"|password\s*=\s*"[^"]+"' decompiled_<package>/sources/**/*.java 2>/dev/null
 ```
 
-### Real-world example finding (anonymized — from a May-2026 engagement)
+### Real-world example finding (anonymized — from an authorized engagement)
 ```
 # Customer-facing APK shipped a hardcoded URL of this shape:
 https://api.<client>.example/<path-token>/<resource-token>?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.<payload>.<sig>
@@ -196,7 +196,7 @@ done
 ```
 
 ### Real-world example
-A customer-facing APK from a May-2026 engagement contained `assets/api_<service>_<domain>_com.cer` — revealed the existence of an `api.<service>.<domain>.example` asset that had NOT surfaced in passive recon.
+A customer-facing APK from an authorized engagement contained `assets/api_<service>_<domain>_com.cer` — revealed the existence of an `api.<service>.<domain>.example` asset that had NOT surfaced in passive recon.
 
 ---
 
@@ -385,7 +385,7 @@ download-apk() {
 
 ---
 
-## Real-world finding template (anonymized — May-2026 engagement)
+## Real-world finding template (anonymized — authorized engagement)
 
 **Finding: Hardcoded JWT + 30+ Internal API Endpoints in a customer-facing APK**
 

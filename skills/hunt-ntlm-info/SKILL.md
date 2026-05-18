@@ -1,7 +1,7 @@
 ---
 name: hunt-ntlm-info
 description: Hunt NTLM/Negotiate information disclosure on internet-reachable IIS/SharePoint/Exchange. Anonymous NTLM Type-2 challenge capture leaks NetBIOS domain, internal DNS forest, computer name, AD timestamp via AV_PAIRS structure. Default Windows-installer hostnames (WIN-XXXXXXXXXXX pattern) signal lazy provisioning. Use when target advertises `WWW-Authenticate: NTLM` or `Negotiate` headers anonymously.
-sources: github, engagement_2026_05
+sources: github, authorized-engagement
 report_count: 1
 ---
 
@@ -229,9 +229,9 @@ Before writing the report, confirm:
 
 ## Real Impact Examples
 
-### Scenario A — Swiss enterprise SharePoint inside parent corporate AD (May 2026 engagement)
+### Scenario A — Enterprise SharePoint inside parent corporate AD
 
-Target: `https://target-portal.example/` — a Swiss enterprise dealer portal (test mirror) operated by a system integrator.
+Target: `https://target-portal.example/` — a enterprise dealer portal (test mirror) operated by a system integrator.
 
 Sending the anonymous Type-1 message to `/_api/web/CurrentUser` returned a Type-2 challenge whose AV_PAIRS decoded to:
 

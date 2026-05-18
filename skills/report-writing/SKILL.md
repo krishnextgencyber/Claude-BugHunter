@@ -495,7 +495,7 @@ Authorization: Bearer ACCOUNT_A_TOKEN
 ## Operator Notes (Claude-BugHunter)
 
 > Engagement-derived additions to the vendored foundation. Wisdom from real
-> May-2026 paid engagements + Phase 2 verification across this repo's 31+
+> authorized engagements + Phase 2 verification across this repo's 31+
 > skill-area live tests. The upstream methodology covers the WHAT; this
 > layer covers the WHEN-IT-ACTUALLY-WORKS and the FAILURE-MODES.
 
@@ -530,7 +530,7 @@ These three systems disagree about 30% of the time. The most common gap: a findi
 2. **Anchor the request in CVSS vector string + business impact, not feelings.** "CVSS 3.1 AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N = 7.5 High because Confidentiality:High applies to cross-tenant data exposure."
 3. **Cite the platform's own VRT entry** that matches your finding. Don't argue against the platform; route within it.
 
-Phase 2's Bugcrowd financial-target engagement saw P4-default findings escalated to P3 via the severity-request paragraph. The escalation isn't automatic — you have to ask, with grounded reasoning, in the first body section.
+An authorized bug-bounty engagement saw P4-default findings escalated to P3 via the severity-request paragraph. The escalation isn't automatic — you have to ask, with grounded reasoning, in the first body section.
 
 ### Evidence rotation
 

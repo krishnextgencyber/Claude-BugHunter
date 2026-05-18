@@ -137,7 +137,7 @@ SSRF earns its place at the top of the impact ladder because every modern applic
 ### URL echo in error message
 - **Looks like:** Server returns 500 with body `"Could not fetch http://attacker.tld/x"`.
 - **Actually is:** String formatting in an error template. The server may never have made an outbound request — the URL is just being printed back to you in the error.
-- **How to disprove:** Plant a Burp Collaborator subdomain in the URL and wait 30–120 seconds. Zero DNS or HTTP interactions = no fetch happened, even with the echo. This is the canonical FP-trap in SSRF hunting. Lesson reference (May-2026 SharePoint engagement): SharePoint `/_layouts/15/download.aspx?SourceUrl=` echoed every URL into the error title; 38 Collaborator-tagged payloads across 12+ parameters yielded zero interactions. The "echo" was client-side formatting; the server resolved a SharePoint-internal SPFile path, not an outbound URL.
+- **How to disprove:** Plant a Burp Collaborator subdomain in the URL and wait 30–120 seconds. Zero DNS or HTTP interactions = no fetch happened, even with the echo. This is the canonical FP-trap in SSRF hunting. Lesson reference (authorized SharePoint engagement): SharePoint `/_layouts/15/download.aspx?SourceUrl=` echoed every URL into the error title; 38 Collaborator-tagged payloads across 12+ parameters yielded zero interactions. The "echo" was client-side formatting; the server resolved a SharePoint-internal SPFile path, not an outbound URL.
 
 ### 500 with stack trace mentioning your URL
 - **Looks like:** Stack trace in response shows `java.net.MalformedURLException: http://attacker.tld/x at ...`. Looks like the server tried to fetch and failed.

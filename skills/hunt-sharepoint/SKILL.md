@@ -1,7 +1,7 @@
 ---
 name: hunt-sharepoint
 description: Hunt Microsoft SharePoint Server (2013/2016/2019/Subscription Edition) on-prem farms — anonymous endpoint enumeration, version disclosure, legacy SOAP login bypass (Authentication.asmx), ToolShell precondition chain (CVE-2025-53770), SafeControl reflection enumeration via Picker.aspx, NTLM Type-2 AD topology disclosure, custom-branding module discovery, EoL farm permanent-CVE-window exploitation, FormDigest anonymous issuance, file-extension blocklist NOT-an-oracle pattern, custom-zone Forms auth bridging on-prem AD. Use when target has SharePoint headers (SPRequestGuid, X-MS-InvokeApp, X-SharePointHealthScore, MicrosoftSharePointTeamServices) or paths (/_layouts/15/, /_vti_bin/, /_api/, /_catalogs/).
-sources: github, engagement_2026_05
+sources: github, authorized-engagement
 report_count: 1
 ---
 
@@ -16,7 +16,7 @@ SharePoint Server (on-prem) is one of the richest enterprise attack surfaces in 
 **Highest-value SharePoint targets:**
 
 - **SP2013 farms still on the public internet** — every CVE since April 2023 is unpatched. Critical-severity findings.
-- **Dealer / partner / supplier portals** built on SharePoint by enterprise integrators (German VW group, a Swiss enterprise system integrator, etc.) — high-impact business data, often nested inside corporate AD trees.
+- **Dealer / partner / supplier portals** built on SharePoint by enterprise integrators (German VW group, a enterprise system integrator, etc.) — high-impact business data, often nested inside corporate AD trees.
 - **SharePoint farms with anonymous Forms-auth zones** — Authentication.asmx becomes anonymously brute-forceable.
 - **SharePoint inside corporate AD parent forests** — NTLM Type-2 leak (see `hunt-ntlm-info`) discloses the parent forest membership.
 - **Telerik-integrated SharePoint installations** — additional deserialization sinks on top of SP's own.
@@ -227,7 +227,7 @@ HelpWindowKey('WSSEndUser_troubleshooting                  (anonymous error.aspx
    - Files matching the extension blocklist (`.ashx`, `.asmx`, `.svc`, `.config`) → 500 with `"file blocked from this Web site by the server administrators"` regardless of whether the file exists.
    - `file://`, UNC paths, `gopher://`, etc. → 500 with `"Value does not fall within the expected range"` — URL-scheme validator rejects.
 
-   **The error-message URL echo is NOT confirmation of SSRF.** Confirm via Burp Collaborator OOB before claiming. (Cross-reference `hunt-ssrf` OOB-Or-It-Didn't-Happen Gate.) Verified negative in May-2026 authorized engagement: 38 Collaborator-tagged payloads across 12+ URL-accepting SP parameters → zero callbacks.
+   **The error-message URL echo is NOT confirmation of SSRF.** Confirm via Burp Collaborator OOB before claiming. (Cross-reference `hunt-ssrf` OOB-Or-It-Didn't-Happen Gate.) Verified negative in authorized engagement: 38 Collaborator-tagged payloads across 12+ URL-accepting SP parameters → zero callbacks.
 
    The extension blocklist also looks like a "file-existence oracle" (existing vs not-found returns different responses) but it's actually just the SP file-extension policy. Don't infer file presence from the blocklist response.
 
@@ -395,7 +395,7 @@ Before writing the report:
 
 ## Real Impact Examples
 
-### Scenario A — a May-2026 SharePoint engagement against an EoL on-prem farm
+### Scenario A — a authorized SharePoint engagement against an EoL on-prem farm
 
 Target: `https://target-portal.example/` — SharePoint Server 2013 build `15.0.5545.1000` (KB5002381 / final EoL April 2023 CU). Tenant = a system-integrator tenant (Swiss <ParentCorp> importer) inside a corporate global AD (`customer.parent-corp.example`). Server hostname `WIN-XXXXXXXXXXX` (default Windows installer pattern).
 

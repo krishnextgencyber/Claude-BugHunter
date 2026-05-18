@@ -1560,7 +1560,7 @@ Then in Claude Code, this skill loads automatically when you ask about bug bount
 ## Operator Notes (Claude-BugHunter)
 
 > Engagement-derived additions to the vendored foundation. Wisdom from real
-> May-2026 paid engagements + Phase 2 verification across this repo's 31+
+> authorized engagements + Phase 2 verification across this repo's 31+
 > skill-area live tests. The upstream methodology covers the WHAT; this
 > layer covers the WHEN-IT-ACTUALLY-WORKS and the FAILURE-MODES.
 
