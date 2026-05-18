@@ -21,7 +21,7 @@ Four layers stack:
 
 All triggered automatically by topic — describe what you're testing in plain English and the relevant skill loads. No invocation by name.
 
-> **51 skills · 15 commands · 574+ disclosed reports curated · 6-phase workflow · validated through both a Bugcrowd financial-target engagement and a paid external red-team engagement against a large Indian manufacturing conglomerate (May 2026).**
+> **51 skills · 15 commands · 574+ disclosed reports curated · 6-phase workflow · exercised against public training platforms (DVWA, OWASP Juice Shop, Hacker101, testphp.vulnweb.com) and calibrated through real authorized engagements (Bugcrowd financial-target work + a paid external red-team engagement, May 2026).**
 
 ---
 
