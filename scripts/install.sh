@@ -11,9 +11,12 @@
 # MULTI-HARNESS FLAGS (skills only — the 71 SKILL.md files. Slash commands,
 # the plugin marketplace, and the /hunt engine are Claude-Code-specific and do
 # NOT port; other harnesses get the knowledge, not the orchestration):
-#   --agents    also copy skills → ~/.agents/skills/   (read by Codex + OpenCode)
-#   --hermes    also copy skills → ~/.hermes/skills/    (Hermes Agent)
-#   --all       Claude (default) + --agents + --hermes
+#   --agents    force-copy skills → ~/.agents/skills/  (Codex; OpenCode reads ~/.claude)
+#   --hermes    force-copy skills → ~/.hermes/skills/   (Hermes Agent)
+#   --all       DETECT installed harnesses and install to each: Claude always, ~/.agents
+#               if Codex is present, ~/.hermes if Hermes is present. With --burp-mcp it
+#               wires Burp only into the detected harnesses. (--agents/--hermes still
+#               force a path regardless of detection.)
 #   --burp-mcp  wire your existing Burp MCP server into the selected harnesses'
 #               configs (opt-in; backs up each config first; uses python3)
 #   --normalize-frontmatter
@@ -32,12 +35,13 @@ BACKUP_DEST="$HOME/.claude/install-backups/$(date +%Y%m%d-%H%M%S)"
 
 usage() { sed -n '2,30p' "$0" | sed 's/^#\{0,1\} \{0,1\}//'; }
 
-DO_AGENTS=0; DO_HERMES=0; DO_MCP=0; NORMALIZE=0
+DO_AGENTS=0; DO_HERMES=0; DO_MCP=0; NORMALIZE=0; DETECT=0
+HAS_CLAUDE=0; HAS_OPENCODE=0; HAS_CODEX=0; HAS_HERMES=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --agents) DO_AGENTS=1 ;;
     --hermes) DO_HERMES=1 ;;
-    --all)    DO_AGENTS=1; DO_HERMES=1 ;;
+    --all)    DETECT=1 ;;
     --burp-mcp) DO_MCP=1 ;;
     --normalize-frontmatter) NORMALIZE=1 ;;
     -h|--help) usage; exit 0 ;;
@@ -45,6 +49,27 @@ while [ $# -gt 0 ]; do
   esac
   shift
 done
+
+# --all → detect which harnesses are actually installed (binary on PATH, or its standard
+# config dir present) and route to each. Claude always; ~/.agents only if Codex is present
+# (OpenCode reads ~/.claude/skills directly); ~/.hermes only if Hermes is present.
+if [ "$DETECT" = "1" ]; then
+  if command -v claude   >/dev/null 2>&1 || [ -d "$HOME/.claude" ];          then HAS_CLAUDE=1; fi
+  if command -v opencode >/dev/null 2>&1 || [ -d "$HOME/.config/opencode" ]; then HAS_OPENCODE=1; fi
+  if command -v codex    >/dev/null 2>&1 || [ -d "$HOME/.codex" ];           then HAS_CODEX=1; fi
+  if command -v hermes   >/dev/null 2>&1 || [ -d "$HOME/.hermes" ];          then HAS_HERMES=1; fi
+  echo "Detecting installed harnesses:"
+  if [ "$HAS_CLAUDE"   = "1" ]; then echo "  ✓ Claude Code   → ~/.claude/skills"; fi
+  if [ "$HAS_OPENCODE" = "1" ]; then echo "  ✓ OpenCode      → reads ~/.claude/skills (MCP wired separately)"; fi
+  if [ "$HAS_CODEX"    = "1" ]; then echo "  ✓ Codex CLI     → ~/.agents/skills"; fi
+  if [ "$HAS_HERMES"   = "1" ]; then echo "  ✓ Hermes Agent  → ~/.hermes/skills"; fi
+  if [ "$HAS_OPENCODE" = "0" ] && [ "$HAS_CODEX" = "0" ] && [ "$HAS_HERMES" = "0" ]; then
+    echo "  (only Claude Code detected — installing there. Force others with --agents / --hermes.)"
+  fi
+  echo ""
+  if [ "$HAS_CODEX"  = "1" ]; then DO_AGENTS=1; fi
+  if [ "$HAS_HERMES" = "1" ]; then DO_HERMES=1; fi
+fi
 
 SKILL_COUNT="$(find "$REPO_DIR/skills" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')"
 
@@ -165,10 +190,18 @@ if [ "$DO_HERMES" = "1" ]; then install_skills "$HOME/.hermes/skills" "hermes"; 
 # === Opt-in: wire the existing Burp MCP into the selected harnesses ===
 if [ "$DO_MCP" = "1" ]; then
   MCP_TARGETS=""
-  if [ "$DO_AGENTS" = "1" ]; then MCP_TARGETS="$MCP_TARGETS --opencode --codex"; fi
-  if [ "$DO_HERMES" = "1" ]; then MCP_TARGETS="$MCP_TARGETS --hermes"; fi
+  if [ "$DETECT" = "1" ]; then
+    # detection mode: wire Burp only into the harnesses actually present
+    if [ "$HAS_OPENCODE" = "1" ]; then MCP_TARGETS="$MCP_TARGETS --opencode"; fi
+    if [ "$HAS_CODEX"    = "1" ]; then MCP_TARGETS="$MCP_TARGETS --codex"; fi
+    if [ "$HAS_HERMES"   = "1" ]; then MCP_TARGETS="$MCP_TARGETS --hermes"; fi
+  else
+    # explicit-flag mode
+    if [ "$DO_AGENTS" = "1" ]; then MCP_TARGETS="$MCP_TARGETS --opencode --codex"; fi
+    if [ "$DO_HERMES" = "1" ]; then MCP_TARGETS="$MCP_TARGETS --hermes"; fi
+  fi
   if [ -z "$MCP_TARGETS" ]; then
-    echo "  ⚠ --burp-mcp needs a harness flag (--agents/--hermes/--all). Skipping."
+    echo "  ⚠ --burp-mcp found no non-Claude harness (none detected, no --agents/--hermes). Skipping."
   elif command -v python3 >/dev/null 2>&1; then
     # shellcheck disable=SC2086
     python3 "$REPO_DIR/scripts/setup_harness_mcp.py" $MCP_TARGETS || \
@@ -188,8 +221,8 @@ if [ "$DO_AGENTS" = "1" ]; then echo "Codex+OpenCode: $HOME/.agents/skills"; fi
 if [ "$DO_HERMES" = "1" ]; then echo "Hermes Agent:  $HOME/.hermes/skills"; fi
 if [ -d "$BACKUP_DEST" ]; then echo "Backups:       $BACKUP_DEST  (outside loading paths)"; fi
 echo ""
-if [ "$DO_AGENTS" = "0" ] && [ "$DO_HERMES" = "0" ]; then
-  echo "Run other harnesses too:  bash scripts/install.sh --all"
+if [ "$DETECT" = "0" ] && [ "$DO_AGENTS" = "0" ] && [ "$DO_HERMES" = "0" ]; then
+  echo "Other harnesses?  bash scripts/install.sh --all   (auto-detects Codex / OpenCode / Hermes)"
   echo "See also: docs/multi-harness.md"
 fi
 echo ""
