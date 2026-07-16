@@ -3,6 +3,13 @@
 > **Secondary interface — slash commands are primary.** Inside a Claude Code conversation, use the slash commands (`/recon`, `/hunt`, `/triage`, `/report`, `/validate`, `/chain`, `/autopilot`, `/scope`, etc.) — they leverage the full skill content and the LLM's judgment.
 >
 > `cbh` is the **terminal-native deterministic runner** — use it when you're outside Claude Code, automating in CI/CD, running scheduled recon, or verifying labs reproducibly. Same skills, different execution model.
+>
+> **Availability — three ways to run `cbh`:**
+> 1. **From a git clone** (no install): `python3 scripts/cbh.py <cmd>` — uses the live `skills/` + `docs/disclosed-reports/`.
+> 2. **Installed standalone** (works without the repo): `pipx install git+https://github.com/elementalsouls/Claude-BugHunter` (or `pip install .` from a clone). Gives you a global `cbh` backed by a bundled skill index; recon output goes to `./recon/` (override with `--out`), and skill/report pointers link to GitHub.
+> 3. It does **not** ship with the plugin — the plugin provides skills + slash commands only.
+>
+> Regenerate the bundled index after editing skills: `python3 scripts/gen_skill_index.py`.
 
 ## When to use `cbh` vs slash commands
 
@@ -103,7 +110,7 @@ This mode is the most ergonomic — the LLM drives Burp via MCP while consulting
 
 ---
 
-## The four subcommands
+## The five subcommands
 
 ### `cbh recon <target>` — passive recon + live-host probe
 
@@ -123,6 +130,19 @@ Outputs:
 - `recon/<target>/resolved.txt`
 - `recon/<target>/live-hosts.json`
 - `recon/<target>/RECON_SUMMARY.md`
+- `recon/<target>/manifest.json` — the **recon→hunt handoff contract** ([`docs/recon-manifest.md`](recon-manifest.md))
+
+### `cbh surface <target>` — ranked attack surface from the recon manifest
+
+```bash
+cbh surface hackerone.com
+```
+
+Reads `recon/<target>/manifest.json` and prints the ranked **P1 / P2 / Kill** surface
+(api/auth/admin hosts → P1; static/CDN → Kill). The same manifest is what `hunt <target>`
+ingests to seed `scope.md` + `notes.md`, and what the `offensive-osint` skill appends
+secrets / identity-fabric data to. This is the deterministic backing for the `/surface`
+slash command. See [`docs/recon-manifest.md`](recon-manifest.md) for the full contract.
 
 ### `cbh classify <url>` — pattern-match URL → hunt-* skills
 

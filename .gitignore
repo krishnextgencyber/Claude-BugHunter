@@ -28,7 +28,7 @@ evidence/
 findings/
 submissions.txt
 notes.md
-scope.md
+/scope.md
 CLAUDE.md.local
 targets/
 
@@ -48,6 +48,10 @@ __pycache__/
 *.pyc
 .venv/
 venv/
+# packaging build output (cbh is pip/pipx installable)
+build/
+dist/
+*.egg-info/
 
 # Node (if anyone adds tooling later)
 node_modules/

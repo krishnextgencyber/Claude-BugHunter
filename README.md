@@ -53,6 +53,18 @@ cd Claude-BugHunter
 bash scripts/install.sh        # copies skills + commands into ~/.claude/
 ```
 
+**What each install path gives you:**
+
+| Path | 71 skills + 15 slash commands | `cbh` CLI | `hunt` scaffolder |
+|---|---|---|---|
+| **A — plugin** | ✅ namespaced under `claude-bughunter:` | ➕ separate `pipx install` | ❌ clone-only |
+| **B — copy install** | ✅ copied into `~/.claude/` | ✅ from the clone | ✅ from the clone |
+
+The plugin is the fastest path to the skills + slash commands. The terminal-native
+`cbh` runner installs standalone — `pipx install git+https://github.com/elementalsouls/Claude-BugHunter`
+— so plugin users can add it without a full clone (see [`cbh` CLI](docs/cbh-cli.md)).
+The `hunt` engagement scaffolder ships with the clone (Option B).
+
 That's it. Open Claude Code and describe what you're testing in plain English — the right skill loads automatically, no invocation by name:
 
 ```text
@@ -88,6 +100,19 @@ bash scripts/install.sh --all --burp-mcp
 → [Multi-harness guide](docs/multi-harness.md)
 
 ---
+
+## Star History
+
+<a href="https://www.star-history.com/?repos=elementalsouls%2FClaude-BugHunter&type=date&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=elementalsouls/Claude-BugHunter&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=elementalsouls/Claude-BugHunter&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=elementalsouls/Claude-BugHunter&type=date&legend=top-left" />
+ </picture>
+</a>
+
+---
+
 
 ## Scope — what this bundle is for, and what it isn't
 
@@ -236,7 +261,7 @@ Operational tradecraft accumulated across bug-bounty engagements and authorized 
 
 **Author:** [ElementalSoul](https://github.com/elementalsouls) · GenAI Security Research
 
-**Sister project:** [Claude-OSINT](https://github.com/elementalsouls/Claude-OSINT) — paired skills for the recon phase that this bundle picks up after.
+**Sister project:** [Claude-OSINT](https://github.com/elementalsouls/Claude-OSINT) — paired skills for the recon phase that this bundle picks up after. Its two recon skills (`offensive-osint`, `osint-methodology`) are **canonically maintained here** and re-exported there, so the two are byte-identical. **Installing both is safe:** each bundle's `install.sh` records a manifest, the script skips re-copying an identical skill, and `--uninstall` keeps any skill the other bundle still owns — uninstalling one never breaks the other.
 
 **Vendored foundation:** [shuvonsec/claude-bug-bounty](https://github.com/shuvonsec/claude-bug-bounty) — methodology, validation, reporting, payload library (8 of 71 skills + 15 slash commands)
 
