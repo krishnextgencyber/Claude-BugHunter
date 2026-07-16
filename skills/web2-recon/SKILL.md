@@ -181,6 +181,48 @@ python3 ~/tools/LinkFinder/linkfinder.py -i "https://target.com" -d -o cli
 deactivate
 ```
 
+### Source-map reconstruction — rebuild the FULL SPA source (HIGH-SIGNAL depth move, most skip)
+
+The single highest-yield "deeper than the crowd" move: SPAs ship (or forget to strip) `.map` files that let you
+reconstruct the ORIGINAL source tree — every admin/feature route, the real API contract, in-code secrets, and
+role/feature-flag logic. This is what "know the app better than its developers" concretely means (Imgur H1 #845677;
+Stripe keys pulled from maps). Always try `<bundle>.js.map` for every JS bundle, and check `//# sourceMappingURL=`.
+
+```bash
+# 1) Collect JS bundle URLs (from katana/gau) and probe each for a sibling .map
+cat /tmp/urls.txt | grep -E '\.js($|\?)' | sed -E 's/\?.*//' | sort -u | while read js; do
+  m="${js}.map"; code=$(curl -s -x http://127.0.0.1:8080 -k -o /dev/null -w '%{http_code}' "$m")
+  [ "$code" = "200" ] && echo "MAP: $m"
+done | tee /tmp/maps.txt
+# also: fetch each bundle and grep the trailing sourceMappingURL (inline or relative .map)
+# 2) Reconstruct the source tree from each map
+#    unwebpack-sourcemap (rarecoil) — writes the original webpack src/ layout to disk
+npx unwebpack-sourcemap --output ./srcmap-out "$(awk '{print $2}' /tmp/maps.txt | head -1)"
+#    or sourcemapper
+sourcemapper -url "https://target.com/static/js/main.js.map" -output ./srcmap-out
+# 3) Mine the reconstructed source like a code audit: routes, API paths, secrets, role gates
+grep -rEni 'api/|/admin|/internal|role|is_?admin|feature|secret|token|apikey' ./srcmap-out | head -60
+```
+Feed every recovered route/param/host BACK into the recon↔test loop. A `.map` that 404s is not "safe" — try the
+Wayback/gau historical bundle URLs too (old JS versions often still have their maps and un-rotated secrets).
+
+### Favicon-hash pivoting — find DNS-less dev/admin hosts (HIGH-SIGNAL, frequently skipped)
+
+Subdomain enum only finds hosts with DNS records. Favicon hashing finds hosts by their icon across the whole
+internet — dev/admin/staging panels with NO DNS name pointing at them surface here (e.g. every default Spring-Boot
+app shares favicon mmh3 `116323821`).
+
+```bash
+# Hash the target's favicon (FavFreak or manual mmh3), then pivot on Shodan/uncover
+python3 ~/tools/FavFreak/favfreak.py -i /tmp/live.txt        # buckets live hosts by favicon hash
+# manual mmh3 of a favicon:
+curl -s -x http://127.0.0.1:8080 https://target.com/favicon.ico | base64 | \
+  python3 -c 'import sys,mmh3,base64;print(mmh3.hash(base64.encodebytes(base64.b64decode(sys.stdin.read()))))'
+# pivot: every host on the internet sharing that favicon (finds DNS-less origins/panels)
+uncover -shodan "http.favicon.hash:116323821" -silent      # replace with the target's hash
+```
+Cross-check hits against scope; a same-favicon host on the target's ASN/CIDR is very likely an in-scope origin.
+
 ---
 
 ## DIRECTORY FUZZING
@@ -695,3 +737,10 @@ Phase 2C verified both patterns live. Always check the EXACT response body strin
 ### Toolchain fallback
 
 Already covered in this file's Phase 2C addition. Quick reminder: dnsx/httpx may segfault on macOS arm64; the dig+curl fallback works for < 100-host runs in ~14 seconds. Don't burn an hour debugging Go binary panics when the fallback gets you to the same URL set.
+
+## Coverage audit = Burp Target site map + follow redirects (2026-06-28)
+Audit coverage from the Burp **Target → Site map** (persistent, deduplicated endpoint tree) — not the ephemeral, duplicate-heavy
+proxy history. Drive the tree by KEYBOARD arrows (it reflows under background traffic). CRUCIAL: follow redirect-only hosts
+(`GET /`→301) — the target may be an entire untested in-scope app NOT in the site map (ClassDojo: marketplace.classdojo.com →
+tutor.classdojo.com = untested Dojo-Tutor marketplace `/api/marketplace/*`, kids'+payments). Each redirect target gets full
+late-asset treatment.
