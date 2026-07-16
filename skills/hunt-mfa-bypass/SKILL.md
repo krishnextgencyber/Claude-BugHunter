@@ -79,6 +79,36 @@ Also test: can backup codes be reused after exhaustion? Some apps regenerate pre
 4. If MFA skipped = device trust not bound to IP/UA = ATO from any location
 ```
 
+### Patterns 8–16: canonical long-tail (commonly missed — HackTricks 2FA-bypass / EmadYaY 2FA-Bypass-Techniques / PATT)
+Fire ALL of these — they're the "no-signature" variants that don't show up in a quick pass:
+```
+[8]  RATE-LIMIT RESET via resend: brute the OTP, and every N tries RE-REQUEST a new code
+     → if the resend resets the attempt counter, brute is effectively unlimited (the #1 reason a
+     "rate-limited" OTP is still brute-forceable). Also: limit is per-code not per-account → new flow each round.
+[9]  OTP NOT BOUND to account/session (CROSS-USER): request OTP as attacker-A, then submit A's
+     valid code in VICTIM-B's verify request (swap the session/userId/flow-id). If accepted, the code
+     isn't bound to identity → ATO. Also: your own 2FA code satisfying another account's challenge.
+[10] 2FA-SKIPPING LOGIN PATHS (the big one): does OAuth/social login, a legacy /mobile or /v1 API
+     login, SAML, or a magic-link return a full session WITHOUT the 2FA step? And does PASSWORD RESET
+     log the user straight in (or clear 2FA) → reset = total 2FA bypass? Enumerate EVERY auth entry and
+     check which actually enforce 2FA.
+[11] DISABLE / ENABLE 2FA without re-auth: POST /disable-2fa with no current OTP/password (CSRF or
+     IDOR on {userId}) → strip victim's 2FA. Or ENROLL attacker's authenticator onto the victim (bind
+     your TOTP secret to their account) → you own their 2FA.
+[12] OTP TYPE-CONFUSION / null / empty / boundary (apply the param-pollution matrix to the code):
+     "", null, [], {"otp":["000000","real"]}, 000000, 00000000 (leading-zero/length), true, integer-vs-
+     string, very-long, %00 — some validators accept empty/null/array or compare loosely.
+[13] CODE / SECRET LEAKED in a response: the verify/setup/status/"resend" endpoint returns the OTP,
+     the TOTP seed (generate codes yourself), or a 2fa_verified/required flag the client trusts.
+[14] OLD CODE still valid after a new one is requested (no invalidation), and code valid across a
+     LONGER window than stated (no/long expiry) — capture, wait, replay.
+[15] STATUS/STEP flag forced: a separate endpoint or response field sets mfa_required=false /
+     step=complete / 2fa_passed=true that the next request trusts (response-tamper twin of [3]).
+[16] ACCOUNT-RECOVERY / backup-factor DOWNGRADE skips 2FA: "lost device" / SMS-fallback / security-
+     question / support-recovery path that re-authenticates with a WEAKER factor and no 2FA.
+```
+**Confirm cross-user/skip findings with TWO accounts** (attacker A vs victim B): success = attacker session reaches a post-2FA state on B without ever entering B's code. Refs: HackTricks *2FA/MFA/OTP Bypass*, github.com/EmadYaY/2FA-Bypass-Techniques, PayloadsAllTheThings.
+
 ### MFA Chain Escalation
 ```
 Rate limit bypass + no lockout = ATO (Critical)
@@ -86,6 +116,44 @@ Response manipulation = client-side only check = Critical
 Skip MFA step = auth flow bypass = Critical
 OTP reuse = persistent session hijack = High
 ```
+
+---
+
+## Recent MFA-bypass research (2024-2026)
+
+### Pattern 17: WebAuthn / passkey downgrade via spoofed unsupported client
+An AitM proxy spoofs an unsupported browser/OS (e.g. Safari-on-Windows) so the IdP (demonstrated on Entra ID) DISABLES passkeys and offers a weaker phishable fallback (SMS/OTP/password), which the proxy then relays. No crypto break — it abuses uneven WebAuthn UA support + the IdP's fallback policy.
+```
+1. Victim's IdP offers passkey (phishing-resistant) as primary factor.
+2. AitM proxy rewrites the User-Agent / navigator to an OS/browser combo the IdP
+   treats as passkey-unsupported (or force navigator.credentials.get() to fail).
+3. IdP falls back to SMS/OTP/password → phishable → proxy relays it → session steal.
+Test: does altering UA or failing the WebAuthn ceremony force a weaker method,
+      or does the IdP hard-fail? A silent downgrade to a phishable factor = finding.
+```
+Source: https://thehackernews.com/2025/10/how-attackers-bypass-synced-passkeys.html
+
+### Pattern 18: FIDO2 hybrid-transport (QR/cross-device) relay — "PoisonSeed"
+The WebAuthn **hybrid transport** (the cross-device "scan this QR with your phone" flow) is NOT origin-bound the way a local authenticator is — the QR/BLE handshake proves possession of a passkey but does not bind it to the *browser that is logging in*. An AitM phishing page renders the *IdP's real* login, the victim scans the QR with their phone, and the passkey ceremony completes **for the attacker's session** because the relying party only sees a valid assertion, not which device initiated it.
+```
+1. Attacker starts a login to the real IdP → IdP returns a hybrid-flow QR.
+2. Attacker proxies that QR onto the phishing page ("sign in with your phone").
+3. Victim scans with their phone, approves the passkey prompt (looks legitimate).
+4. Assertion satisfies the RP → attacker's session is now authenticated. No crypto break.
+Test: does the RP offer hybrid/cross-device sign-in, and is a QR/BLE assertion
+      accepted from a session on a different network/device than the authenticator?
+```
+Source: https://www.expel.com/blog/poisonseed-downgrading-fido-key/
+
+### Pattern 19: WebAuthn credential-binding gap — assertion accepted for the wrong user (CVE-2025-26788)
+Some RPs verify the WebAuthn assertion signature but fail to bind the returned **credential ID** to the account being logged into — so an attacker registers a passkey on *their own* account, then replays that assertion during a login attempt for a *victim* account (or swaps the `userHandle`/`credentialId` in the finish-auth request). The server validates the signature (valid) but never checks the credential belongs to the claimed user → auth as anyone.
+```
+Test the finish-authentication request: swap credentialId / userHandle / rawId to values
+from an attacker-registered passkey while asserting the victim's username. If it authenticates,
+the credential↔account binding is missing. Also test: passkey registered on account A usable to
+log into account B; assertion for a deleted/other credential accepted.
+```
+Source: https://nvd.nist.gov/vuln/detail/CVE-2025-26788
 
 ---
 

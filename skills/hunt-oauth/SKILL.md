@@ -374,6 +374,70 @@ A server-side prefix-match flaw on `redirect_uri` is **necessary but not suffici
 
 ---
 
+## OIDC Dynamic Client Registration SSRF (the 2025 "OAuth-by-design" class)
+
+OpenID Connect Dynamic Client Registration (`/register`, `/connect/register`) and discovery let a client supply URLs the **provider fetches server-side** — SSRF baked into the spec.
+
+- **Server-side-fetched fields:** `logo_uri`, `jwks_uri`, `sector_identifier_uri`, `request_uri`, `initiate_login_uri`, `policy_uri`/`tos_uri` (some renderers). Register a client pointing these at `http://169.254.169.254/...` or an internal host → the IdP fetches it. `jwks_uri`/`request_uri` are the strongest because the provider *must* retrieve them during the flow, so they fire even where logo fetching is lazy.
+- **WebFinger user enumeration:** `/.well-known/webfinger?resource=acct:victim@target.com` often discloses whether an account exists / which IdP it routes to — pre-ATO recon.
+- **redirect_uri session poisoning:** the 2025 named variant where a loosely-matched/attacker-influenced `redirect_uri` plants state into the victim's flow (pairs with `hunt-open-redirect` and cookie-tossing).
+
+Confirm SSRF blind-first with `interactsh`/Collaborator in the registered URL, then escalate to metadata/internal like any SSRF (`hunt-ssrf`, `cloud-iam-deep`).
+
+Sources: https://www.intigriti.com/researchers/blog/bug-bytes/bug-bytes-116-new-oauth-attacks-hacking-shopify-with-a-single-dot-netmask-ssrf · https://blog.doyensec.com/2025/01/30/oauth-common-vulnerabilities.html
+
+---
+
+## Modern token/flow attacks (commonly missed — audit vs PortSwigger Academy + PATT OAuth + Doyensec)
+`redirect_uri`/`state` are well-covered above; these flow/token attacks are the long-tail that gets skipped:
+```
+[PKCE downgrade]     drop code_challenge + code_challenge_method from /authorize (or downgrade S256→plain,
+                     or send code_challenge_method=plain with code_verifier=code_challenge) → if the token
+                     endpoint still exchanges the code, PKCE is optional → public-client code interception.
+[response_type/mode] tamper response_type code↔token↔"code id_token"(hybrid); flip response_mode to query/
+                     fragment/form_post or web_message → fragment/web_message can leak the token via Referer/
+                     postMessage to a page you influence. Test prompt=none for silent token minting.
+[code reuse / race]  exchange the SAME authorization code twice (and N-parallel race) → if both succeed, code
+                     isn't single-use → replay. Also AUTH-CODE INJECTION: paste a victim's code into your own
+                     session's token request (or your code into the victim) — bound to session? PKCE stops this.
+[id_token validation] if an id_token is accepted (implicit/hybrid/"login with id_token"): alg:none / unsigned,
+                     wrong/missing aud, wrong iss, expired, kid/jku/x5u swap (→ hunt-api-misconfig JWT). A
+                     forged id_token with {sub: victim} = direct ATO.
+[iss/sub confusion]  multi-IdP apps: does the RP bind the account by sub WITHOUT checking iss? mint a token from
+                     a DIFFERENT (attacker-controlled or second) IdP with the victim's sub/email → logged in as
+                     victim. (2025 class — jsmon/Doyensec.) Also email-without-iss-trust: provider returns an
+                     unverified email the RP trusts → register/login as anyone.
+[cross-client]       use an access_token/code minted for client_id A at client B's endpoints (token-audience
+                     confusion); or a token for a low-scope client accepted by a high-scope API.
+[scope upgrade]      add/widen scope at /authorize or /token (scope=openid+admin), or downgrade-then-add; check
+                     if the granted scope is enforced or the UI-shown scope ≠ token scope.
+```
+**Validate ATO with two accounts** (attacker A vs victim B): success = A's session/token authenticates as B, or B's
+code/token lands at A. Refs: PortSwigger *OAuth 2.0 authentication vulnerabilities*, PayloadsAllTheThings *OAuth*,
+Doyensec *Common OAuth Vulnerabilities (2025)*, jsmon *iss+sub confusion*.
+
+---
+
+## Recent OAuth/OIDC research (2024-2026)
+
+Newer named classes not covered above. Fire each when the corresponding signal appears.
+
+1. **Auth0 cross-tenant session (`sid`) reuse → forged victim-tenant JWT** — Auth0 `/authorize` fails to validate which tenant a session cookie belongs to. Authenticate in your OWN Auth0 tenant, then replay that `sid` cookie against the VICTIM tenant's `/authorize` with the victim `client_id` → Auth0 signs a valid victim-tenant JWT for the same-email identity. Test any Auth0-fronted app: does the `sid`/session cookie get re-scoped per tenant? Source: https://sentorsecurity.com/blog/vulnerability-disclosure-authentication-bypass-in-auth0/
+
+2. **"Sign in with Google" defunct-domain / `hd`-claim reclaim ATO** — Services keying users on Google `email`+`hd` (hosted-domain) rather than the stable `sub` are taken over by buying a dead company's domain, recreating former employees' Workspace mailboxes, and logging into all their SaaS. Standing check on any "Login with Google Workspace" app: is identity bound to `sub` or to the reclaimable `email`/`hd`? Source: https://trufflesecurity.com/blog/millions-at-risk-due-to-google-s-oauth-flaw
+
+3. **COAT — cross-app OAuth / mix-up in integration (iPaaS) platforms** — On multi-connector platforms a malicious app/AS redirects the user to a benign AS that issues a code; the client still believes it's talking to the malicious AS and forwards the code to the attacker's token endpoint → benign app's auth code leaked (1-click). Affected 11/18 major platforms (CVE-2023-36019). Test connector/iPaaS OAuth: does the client bind the returned code to the `iss`/AS it actually started with? Source: https://www.usenix.org/conference/usenixsecurity25/presentation/luo-kaixuan
+
+4. **OAuth-flow hijack via cookie tossing from a sibling subdomain** — A subdomain takeover/XSS on any `*.target` sets a domain-scoped cookie (state, session, oauth-txn) that overrides the apex's during the OAuth callback, fixing the attacker's `state`/PKCE txn and binding the victim's returned code to the attacker's session. Test whether OAuth state/txn cookies use the `__Host-` prefix and reject sibling-set cookies. Pairs with `hunt-subdomain`/`hunt-session`. Source: https://labs.snyk.io/resources/hijacking-oauth-flows-via-cookie-tossing/
+
+5. **fast-jwt algorithm-confusion re-enabled by leading whitespace (CVE-2026-34950)** — The lib's RS256→HS256 confusion guard is a regex on the key; prefixing the public key with leading whitespace defeats the regex so fast-jwt treats the PEM public key as an HMAC secret — classic alg-confusion resurrected on a "patched" lib. Fingerprint fast-jwt/Node and retest RS256→HS256 with the whitespace twist (`" "+pubkey` as the HMAC secret). Source: https://securityonline.info/fast-jwt-authentication-bypass-cve-2026-34950-whitespace/
+
+6. **OAuth-discovery metadata → OS command injection (mcp-remote CVE-2025-6514)** — A malicious OAuth/OIDC server returns a crafted `authorization_endpoint` in its `.well-known` discovery metadata; the client passes it unsanitized into an OS browser-launch command → RCE on the client (CVSS 9.6). Dynamic OIDC discovery metadata is an injection SOURCE, not just a JWKS/SSRF vector — treat every `.well-known`-derived URL a client executes/opens as tainted. Source: https://jfrog.com/blog/2025-6514-critical-mcp-remote-rce-vulnerability/
+
+7. **Auth0 / nextjs-auth0 OAuth parameter injection (`redirect_uri`/`scope`)** — A crafted request into the SDK's authorize handler injects extra OAuth params (`redirect_uri`, etc.), redirecting the flow to attacker endpoints or leaking tokens (Oct 2025 SDK flaw). Fuzz duplicate/extra OAuth params through the app's OWN authorize wrapper — the injection is in the SDK's request builder, not the AS. Source: https://www.webpronews.com/okta-auth0-library-hit-by-oauth-injection-vulnerability-from-ai-code/
+
+8. **Device Authorization Grant (device-code) phishing → durable ATO bypassing MFA/Conditional-Access** — If the target exposes a device grant (`/device_authorization`, `device_code`/`user_code`, `grant_type=urn:ietf:params:oauth:grant-type:device_code`), the attacker starts the flow, sends the victim the **legitimate provider's** verification URL + `user_code` (NO fake page — the whole page is real, which defeats phish-training), the victim approves in their own already-MFA'd session, and the attacker polls `/token` → receives the victim's real, MFA-satisfied access + refresh tokens. Auth is decoupled from the origin session, so MFA/CA don't bind to the attacker's device → durable ATO from any IP. Test any app with a **device/TV/CLI/smart-appliance login**: (1) is the device grant enabled and reachable; (2) missing consent-binding (does approval show WHICH app/scopes/where the request originated); (3) missing `user_code` rate-limits/entropy (brute a valid pending `user_code`); (4) over-broad default scopes on the device client; (5) is the resulting token usable from a completely separate device/IP. Pairs with `m365-entra-attack` (Storm-2372) — kill the device-code exposure if the origin session isn't bound. Sources: Microsoft/Proofpoint 2025 device-code phishing writeups — https://www.proofpoint.com/us/blog/threat-insight/access-granted-phishing-device-code-authorization-account-takeover
+
 ## Related Skills & Chains
 
 - **`hunt-subdomain`** — The single highest-impact OAuth chain. Chain primitive: OAuth `redirect_uri` validator accepts any `*.target.com` subdomain + recon reveals `dev-staging.target.com` CNAMEs to a deprovisioned Heroku/S3/Azure app → claim the dangling subdomain → host an OAuth callback receiver there → craft `/oauth/authorize?redirect_uri=https://dev-staging.target.com/cb` → victim clicks → auth code lands on attacker-claimed subdomain → exchange for token → ATO. The redirect_uri whitelist passed because the subdomain is "legitimately" under target.com control.

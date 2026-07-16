@@ -38,6 +38,25 @@ Name/bio/description fields, email templates, invoice name, PDF generators,
 URL path parameters, search queries reflected in results, HTTP headers reflected
 ```
 
+### Blind SSTI — Error-Based Oracle ("Successful Errors", 2025)
+> When the render output is NOT reflected back (email/PDF/report generators that only return "sent/queued"), you can still extract data by forcing the engine into a RUNTIME error whose message ECHOES the evaluated expression — the same error-based extraction trick long used for blind SQLi, applied to templates. #1 in PortSwigger's Top-10 Web-Hacking-Techniques-2025 (Vladislav Korchagin). Source: https://github.com/vladko312/Research_Successful_Errors
+
+- **Principle:** the app suppresses normal output but surfaces (or logs, or 500s with) parser/runtime exceptions. Make the engine evaluate `<secret>` and then throw an error that includes the evaluated value in its text — the error message is your blind oracle. Works even when no numeric/string reflection ever comes back.
+- **Detection polyglot** (fire in any field; a differential 500 / distinct error string vs a benign value = evaluation happening):
+  ```
+  ${{<%[%'"}}%\    →  broad multi-engine syntax-error trigger; a template parse error (not a generic 400) = the value hits a template engine
+  ```
+- **Turn eval into an echoing error (engine-specific):**
+  ```jinja2
+  {{ ''.__class__.__mro__[1].__subclasses__()[X] }}      # bad index → IndexError text leaks the list; walk X to enumerate gadgets blind
+  {{ self.__init__.__globals__.__builtins__.open('/etc/passwd').read()[999999] }}  # slice OOB → error embeds read content
+  ```
+  ```twig
+  {{ ('id'|filter) }}   # unknown-filter exception echoes the attempted callable/value in the message
+  ```
+  General recipe: coerce the target expression into a type/format/index/undefined-name error whose stringified exception includes the expression's value (division-by-a-computed-value, out-of-range index/slice, "no such attribute/filter '<value>'", type-mismatch concatenation). Read the leaked bytes out of the error body.
+- **Confirm before claiming RCE:** an error-oracle proves server-side evaluation and blind data extraction — escalate to `id`/OOB-DNS with a unique marker (still non-destructive) to prove code exec; a pure error-leak is data-disclosure-grade until then. A ready toolkit with per-engine error payloads exists at the source repo above.
+
 ---
 
 ## Related Skills & Chains

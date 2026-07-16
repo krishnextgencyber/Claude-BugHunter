@@ -135,6 +135,24 @@ grep -r "Marshal.load\|Marshal.restore" --include="*.rb" .
 # Use ruby-advisory-db gadgets
 ```
 
+### Phase 7 — .NET SOAP client-side "SOAPwn" (WSDL → arbitrary file write → RCE)
+> Piotr Bazydło / watchTowr, Black Hat EU 2025. A CLIENT-side .NET deser/abuse primitive: an attacker who controls the **WSDL** a .NET SOAP client consumes gets pre-auth RCE. The auto-generated `SoapHttpClientProtocol` proxy's `GetWebRequest` override is missing a cast, so a crafted WSDL/endpoint URL makes `HttpWebClientProtocol` instantiate a `FileWebRequest` instead of an `HttpWebRequest` — the SOAP request BODY is then WRITTEN to an attacker-chosen **UNC or local path** (e.g. a webshell into the web root) → RCE. Microsoft classified it won't-fix, so it's **evergreen** on any appliance/app whose .NET service fetches a remote/attacker-influenced WSDL. Source: https://labs.watchtowr.com (SOAPwn).
+
+```
+Attack shape:
+1. Find a .NET feature that consumes a WSDL / SOAP endpoint URL you can influence
+   (integration setup, "connect to service", import-from-URL, SSRF-reachable internal client).
+2. Serve a malicious WSDL that points a generated proxy method's request URI at a
+   file:// / UNC path (\\attacker\share\  or  C:\inetpub\wwwroot\shell.aspx).
+3. Trigger the generated proxy method → HttpWebClientProtocol builds a FileWebRequest →
+   the SOAP body is written to that path → drop a webshell / poison a config → RCE.
+```
+- **Real CVEs using this class:** Barracuda **CVE-2025-34392**, Ivanti EPM **CVE-2025-13659** (pre-auth RCE on appliances).
+- **Where to look:** appliance admin panels and enterprise .NET apps with "add/connect external SOAP service", MFT/monitoring agents, any server-side SOAP client whose target URL is user- or SSRF-controllable.
+
+### Cross-reference — SharePoint "ToolShell" pre-auth RCE (CVE-2025-53770)
+On-prem SharePoint pre-auth RCE chaining a **Referer auth-bypass + ToolPane init-phase invocation + a type-confusion/deserialization gadget** — exploited in the wild 2025. Full playbook lives in **`hunt-sharepoint`**; treat any on-prem SharePoint in scope as a deserialization-RCE target and route there.
+
 ---
 
 ## Chain Table

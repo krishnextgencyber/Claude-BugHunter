@@ -67,6 +67,53 @@ H2-downgrade smuggling attacks rely on the front-end speaking HTTP/2 to the clie
 
 Tools that send HTTP/2 raw frames (Burp Pro's HTTP Request Smuggler extension, `h2csmuggler`, `smuggler.py`) are the right starting point against CDN-fronted targets. Avoid HTTP/1.1-only test clients (curl, raw sockets) against H2-front-ended targets — you'll send the wrong protocol entirely.
 
+### TE.0 / 0.CL / CL.0 / Expect-desync (2024-2025 dominant variants)
+
+The classic CL.TE/TE.CL framing assumes the body *length* is the disagreement. The newer family is about one side seeing **no body at all**:
+
+- **CL.0** — front-end forwards the request, back-end ignores `Content-Length` and treats the request as bodyless → your body is parsed as the *next* request on that connection. Targets endpoints that drop CL (static handlers, redirects, OPTIONS).
+- **0.CL** — inverse: front-end sees implicit-zero length, back-end honours `Content-Length`. Kettle's 2025 work shows a **double-desync** converting 0.CL→CL.0 to make it exploitable.
+- **TE.0** — the CL.0 analogue driven by `Transfer-Encoding`: front-end honours `TE: chunked`, back-end treats it as `Content-Length: 0`. Hit **thousands of Google Cloud Load Balancer / IAP** hosts (Arnolfo, Gregorio, @_medusa_1_, Bugcrowd 2024 — $8.5K).
+- **Expect-based desync** — `Expect: 100-continue` (and obfuscated forms like `Expect: y 100-continue`) shifts *when* the body is read, bypassing front-end sanitization. Kettle's "HTTP/1.1 must die" (2025) generalizes it; an HTTP/2-front-end + HTTP/1.1-upstream downgrade *amplifies* risk (a fourth way to declare length). 2025 cases: Cloudflare (~24M sites), Akamai CVE-2025-32094 (OPTIONS + obsolete line folding), Netlify, GitLab, AWS ALB+IIS; >$350K bounties.
+
+**Detection:** Burp HTTP Request Smuggler's newer CL.0 / 0.CL / Expect probes, plus `CLZero` for CL.0 fuzzing. Confirm with the timing-delta-on-a-different-connection test — never your own follow-up request.
+
+### Client-side / browser-powered desync (CSD) + pause-based desync (no shared back-end needed)
+The above are **server-side** (front-end↔back-end disagreement, shared connection pool). The browser-powered class differs and is missed because it needs no proxy chain:
+- **Client-side desync (CSD, PortSwigger 2022):** a single server mis-handles a request body (e.g., a `POST` to an endpoint that ignores the body — redirect/static/404), so the body stays in the socket and prepends to the *victim's own next request* — triggerable from JavaScript in the victim's browser via `fetch(...,{mode:'no-cors'})` over a reused connection. Impact = same-site request hijack / stored-XSS-equivalent / cred theft **without** a vulnerable front-end. Probe: a bodyless-handling endpoint that leaves the connection poisoned; confirm in Burp with the "connection-state" attack mode.
+- **Pause-based desync (2022/2025):** send headers, **pause**, and time the server's read — servers that read the body in a second TCP segment after a delay reveal a desync window even when single-packet probes look clean. Burp's "pause before sending body" / Turbo Intruder time-gating. Pairs with Expect-desync.
+- **Connection-state attacks:** first-request-routing / first-request-validation — the front-end applies auth/routing only to the *first* request on a connection, so a smuggled/pipelined second request inherits it (reach internal vhosts / skip the WAF). Test by pipelining two requests on one keep-alive connection.
+
+Sources: https://www.bugcrowd.com/blog/unveiling-te-0-http-request-smuggling-discovering-a-critical-vulnerability-in-thousands-of-google-cloud-websites/ · https://portswigger.net/research/http1-must-die · https://portswigger.net/research/browser-powered-desync-attacks
+
+### "HTTP/1.1 must die" — parser-discrepancy hunting (2025 research)
+
+The 2025 generalization: stop testing *named* length-tricks (CL.TE/TE.CL) first and instead **map the parser boundary**, because any header the front-end sees but the back-end hides (or vice-versa) makes a desync class *latent* even after the specific length-trick of today is patched.
+
+- **Parser-discrepancy scan (V-H / H-V) as the FIRST move.** Probe for a header one side *visibly* processes while the other *hides* it, using a partially-obscured header (leading space, a duplicate with an invalid value, obs-fold), and read the **response-code delta** (e.g. `200` vs `503`) to locate the boundary. A mismatch = a latent desync even if no CL/TE trick fires today. HTTP Request Smuggler **v3.0** automates this scan. Source: https://portswigger.net/research/http1-must-die
+- **Single-connection "visible" desync (V-H / H-V without Transfer-Encoding).** WAFs now regex-block smuggled `Transfer-Encoding`; instead exploit generic parser-*visibility* gaps with a partially-obscured header and **no TE at all** — nothing for the TE signature to match. Source: https://portswigger.net/research/http1-must-die
+- **Double-desync (0.CL → CL.0 chaining) — byte-offset weaponization.** (Extends the double-desync note above.) The first request uses **0.CL** to slice the header block off the *second* request, which is then re-weaponized as **CL.0** to re-poison with a malicious prefix. Because servers *append* rather than prepend headers, the offset is predictable — calculate exact byte offsets to cut the victim's headers mid-transmission → stable cross-user smuggling. Source: https://portswigger.net/research/http1-must-die
+- **0.CL early-response gadgets (break the deadlock).** A 0.CL stalls because the back-end waits for a body that never arrives; break it by targeting an endpoint that **responds BEFORE reading the body**: reserved Windows/IIS device filenames (`/con`, `/nul`), server-level redirects, any early `301`/`400`. Without such a gadget the 0.CL is unexploitable — hunt one first. Source: https://portswigger.net/research/http1-must-die
+- **Obfuscated `Expect` variants (`Expect: y 100-continue` and mutants).** Same broken 100-continue state machine as Expect-desync, but the value is mutated so the exact-string `100-continue` WAF signature never matches while the front-end parser still enters the confused state. Works in both 0.CL and CL.0. (Base case already noted above; these are the WAF-evading mutants.) Source: https://portswigger.net/research/http1-must-die
+- **Expect-triggered dual response-header-block leak (info-leak, not splitting).** `Expect: 100-continue` makes some stacks emit **TWO** response header blocks; header-stripping proxies sanitize only the *first*, so internal headers (`X-Cache-Key`, account IDs, backend routing) leak in the *second*. Pure info-disclosure primitive. Source: https://portswigger.net/research/http1-must-die
+- **CVE-2024-24791 — Go `net/http` ReverseProxy Expect connection-pool poisoning.** Repeated `Expect: 100-continue` to a Go `httputil.ReverseProxy` poisons upstream keep-alive pool connections (mishandled interim-response state) → DoS + desync against a ubiquitous proxy lib. Fingerprint the Go stack and fire. Source: https://www.sentinelone.com/vulnerability-database/cve-2024-24791/
+
+### "Funky Chunks" — chunk-terminator / trailer-newline ambiguity desync (w4ke, Jun 2025)
+
+A desync that fires **without any CL/TE confusion at all**, so defenses tuned only to CL.TE/TE.CL (and WAFs that regex the `Transfer-Encoding` value) don't see it. The disagreement is in how each side parses the **chunk framing itself**: chunk-size lines and the chunk/trailer section end in a two-byte `\r\n` terminator, and parsers differ on whether a lone `\r` or lone `\n` (or a stray newline in the trailer block) closes the chunk. A permissive parser **overreads** past what the strict side considers the message boundary — the overread bytes become the prefix of the next request on the connection. Both sides accept `Transfer-Encoding: chunked` (no dueling length headers), so it slips past CL.TE-only mitigations.
+
+- **Probe:** send a chunked body where the chunk-size or trailer line uses a single-byte terminator (bare `\n`, or a trailer with an extra/mismatched newline) so one hop consumes an extra byte or an extra line the other doesn't; confirm with the timing-delta-on-a-different-connection test (never your own follow-up).
+- **When to reach for it:** front-end is RFC-strict on CL/TE (Nginx/Envoy/Caddy in the matrix above) yet still forwards chunked bodies to origin — the framing ambiguity survives even where the classic length tricks are dead.
+- Source: https://w4ke.info/2025/06/18/funky-chunks.html
+
+### "Single-Packet Shovel" — desync-powered request tunnelling (Assured, 2025)
+
+Combines the **single-packet attack** (all bytes in one TCP segment, the same primitive that powers single-packet race conditions) with an **H2→H1 downgrade desync** to *tunnel* a whole request past the front-end into internal-only paths — a front-end auth/routing **bypass** rather than a cross-user poison. The single-packet delivery removes network-jitter noise so the desync lands reliably; the tunnelled request reaches back-end vhosts/routes the edge WAF/ACL believes it filtered (extends the connection-state / first-request-routing note above).
+
+- **Use it for:** reaching internal-only admin/routing paths behind an H2 front-end + H1 origin where a normal external request is blocked by the edge, and for making flaky downgrade-desyncs deterministic.
+- **Tooling:** Turbo Intruder single-packet mode + Burp HTTP Request Smuggler H2-downgrade probes.
+- Source: https://assured.se/posts/the-single-packet-shovel-desync-powered-request-tunnelling
+
 ---
 
 ## Related Skills & Chains

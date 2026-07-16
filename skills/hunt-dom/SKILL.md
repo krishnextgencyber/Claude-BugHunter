@@ -235,6 +235,68 @@ grep -rnE "angular|vue|handlebars|mustache|nunjucks|alpinejs|\bv-|ng-app" recon/
 
 ---
 
+## Phase 7 — XSSI (Cross-Site Script Inclusion)
+
+Cross-origin theft of dynamic-JS/JSON responses that embed per-user secrets. A victim's browser sends their cookies when an attacker page `<script src>`-loads the endpoint, and the response body becomes readable cross-origin if it isn't a guarded pure-JSON object. This is the read-side cousin of CSRF — and CORS does NOT stop `<script>` includes.
+
+```bash
+# Signal: authenticated endpoints returning JS or JSON-ish bodies with user data,
+# served WITHOUT a parser-breaking prefix and WITHOUT a strict JSON Content-Type.
+#   - global var assignment:        var userData = {...}      <- directly leakable
+#   - JSONP:                        callback({...})           <- name the callback, steal it
+#   - bare JSON array:              [{"email":"..."}]         <- legacy array-constructor leak
+#   - non-guarded object literal returned as text/javascript
+# Probe cross-origin from an attacker-origin page:
+#   <script>var userData=null;</script>
+#   <script src="https://TARGET/api/me.js"></script>     # if it assigns a global, read it
+#   <script>fetch... NO — the point is <script>, which bypasses SOP read-restriction for executable JS
+```
+
+- **Leakable shapes**: global-var assignment, JSONP (override the callback name), bare top-level JSON arrays on old engines, and any sensitive body served as `text/javascript`/`application/javascript`.
+- **Defenses that kill it** (confirm their ABSENCE before reporting): a JSON anti-hijacking prefix (`)]}',\n`, `while(1);`, `for(;;);`), strict `Content-Type: application/json` + `X-Content-Type-Options: nosniff`, requiring a custom header / non-simple request, and SameSite cookies (which also blunt the cross-site cookie send).
+- **Proof**: a real attacker-origin HTML page that loads the endpoint via `<script>` and exfiltrates the parsed secret to OOB — not a same-origin fetch. Token/PII leak cross-origin = the impact.
+
+---
+
+## Phase 8 — DoubleClickjacking (frameless UI redress)
+
+Classic clickjacking needs an iframe, so `X-Frame-Options` / CSP `frame-ancestors` / `SameSite` cookies defeat it. DoubleClickjacking (Paulos Yibelo, Dec 2024) uses **no frame** and bypasses all of them.
+
+```
+# Attacker page shows a "double-click to verify" decoy (fake CAPTCHA).
+# 1) User mousedowns the FIRST click on the decoy button.
+# 2) onmousedown: window.opener.location (or this window) navigates the TOP window
+#    to the real sensitive page — e.g. https://target/oauth/authorize?...client_id=attacker
+#    and the decoy popup is closed.
+# 3) The SECOND click of the user's double-click lands on the now-foregrounded
+#    legitimate "Authorize" / "Confirm" / "Delete account" button.
+```
+
+- **Why defenses fail:** the target is a real top-level same-site document, not framed — XFO, `frame-ancestors`, and SameSite never engage. The whole attack is timing + window swapping.
+- **Targets:** any one-click sensitive action — OAuth consent (→ ATO), "delete account", settings/email change, OAuth-app authorization, browser-extension permission grants, web3 transaction approval.
+- **Proof:** a working attacker page that swaps the window on first mousedown and lands the second click on the live target button; show the privileged action completing. A static mockup is not proof.
+- **Defense to recommend:** gate sensitive buttons behind a real gesture/visibility check — disable until `mouseup` on the actual control, or require a deliberate non-double-click interaction.
+
+Source: https://www.infosecurity-magazine.com/news/doubleclickjacking-attack-bypasses/
+
+---
+
+## Recent sanitizer/DOM research (2024-2026)
+
+Modern sanitizer and DOM-clobbering research: the sanitizer/browser-native API itself is increasingly the gadget, and clobbering has deeper multi-level primitives than the classic single/nested cases in Phase 1.
+
+1. **DOMPurify config-object prototype-pollution gadget (CVE-2026-41238)** — DOMPurify's default config parser falls back through `Object.prototype`, so any existing client-side PP (`__proto__[ALLOWED_ATTR]`, `RETURN_TRUSTED_TYPE`, etc.) silently rewrites the sanitizer's own config at call time, turning a "safe default" `DOMPurify.sanitize(x)` into XSS pass-through — affects 3.0.1–3.3.3 with NO app-side misconfig. Inverts the PP hunt: the sanitizer itself is the gadget. Source: https://labs.trace37.com/blog/dompurify-pp-ceh-bypass/
+2. **DOMPurify template-literal regex mXSS (CVE-2025-26791)** — In `SAFE_FOR_TEMPLATES` mode the `TMPLIT_EXPR` regex regressed to `/\${[\w\W]/gm` (missing closing brace), so a template expression omitting `}` survives sanitization and the browser fixup reconstitutes it into live markup. Fixed 3.2.4. Source: https://www.cve.news/cve-2025-26791/
+3. **DOMPurify hook/config misconfig catalog** — Per-`sanitize()`-call tests: `uponSanitizeAttribute→forceKeepAttr=true` skips URI regex (drawio); `ADD_URI_SAFE_ATTR:['href']` re-enables `javascript:`; `SAFE_FOR_XML:false` drops the `</style>`/`-->` guard; `afterSanitizeAttributes` string-`replace`/`toUpperCase` (`'ﬆ'.toUpperCase()==='ST'`) rebuilds `</STYLE>`; SVG `<style>` has lowercase `nodeName==="style"` so uppercase-only removal hooks miss it; `<base href>` makes hooks see a different URL than the DOM gets. Audit each call's config+hooks, not just the version. Source: https://mizu.re/post/exploring-the-dompurify-library-hunting-for-misconfigurations
+4. **Chrome Sanitizer API (`setHTML`) bypasses** — (1) SVG `<animate attributeName="xlink:href:x" values="javascript:alert(1)">`: parser keeps only first two colon segments so the animation still targets `xlink:href` while the sanitizer's exact-string block fails; (2) `<form action="javascript://://-alert(1)//">`: fast-path protocol checker treats it as protocol-less, then Chrome's form re-serialization normalizes it into executable `javascript:`. The browser-native Sanitizer is treated as safe and nobody fuzzes it. Source: https://slcyber.io/research-center/two-bypasses-for-chromes-sanitizer-api/
+5. **DOMino-Effect deep DOM-clobbering gadgets (USENIX 2025)** — Three previously-missed primitives beyond single-global/two-level: `<input form=ID>` clobbers property lookups on `<form id=ID>`; nested `window` proxy chaining; shared-`id`→`HTMLCollection` where a child `name=` attr creates nested addressable props (`x.y.z`) → multi-level `document.x.y` clobbering. Zero-days found in Google API client, Closure, MathJax, Webpack. Source: https://www.usenix.org/system/files/usenixsecurity25-liu-zhengyu.pdf
+6. **sanitize-html mXSS via htmlparser2 parsing differential** — sanitize-html parses with non-spec-compliant `htmlparser2`, so markup it deems benign is re-fixed by the browser into executable HTML (context-breakout in `<title>`/`<style>`/`<textarea>`/attribute contexts). Distinct from DOMPurify; huge Node/SSR footprint. Test foreign-content/RCDATA-boundary payloads in a real browser. Source: https://sonarsource.github.io/mxss-cheatsheet/explained/
+7. **Server-side DOMPurify context-breakout (no output-context awareness)** — When sanitized output is concatenated into a non-`body` context like `"<textarea>"+DOMPurify.sanitize(input)+"</textarea>"` or inside `<style>/<title>`, a payload `<div id="</textarea><img src=x onerror=alert()>">` breaks out because DOMPurify sanitizes assuming `body` context but the insertion point is RCDATA. SSR/isomorphic apps (DOMPurify+jsdom); the sanitizer is correct but the placement is the bug. Source: https://mizu.re/post/exploring-the-dompurify-library-hunting-for-misconfigurations
+8. **Client-Side Path Traversal (CSPT) — the DOM-side primitive** — Client JS builds a fetch/XHR path by concatenating an attacker-influenced value (URL path segment, hash, `id` param, imported filename) into an API URL *without* normalization: `fetch('/api/v1/items/' + userInput)`. Feeding `../../` reroutes the same-origin, credentialed request to a DIFFERENT endpoint the app never intended (`../../admin/deleteUser/123`, `../../../me/reset`). Alone it reads/hits an unintended endpoint; it becomes CSPT2CSRF (state-change with the victim's session) when the traversed target is a sink, and can be chained to exfil when the response is reflected into the DOM. Hunt every client-built request path for un-normalized user input; try `%2e%2e%2f`, `..%2f`, and trailing-segment injection. Sinks: `fetch`/`axios`/`XMLHttpRequest` with string-concatenated paths. Pairs with `hunt-csrf` (CSPT2CSRF). Source: https://blog.doyensec.com/2025/01/09/cspt-file-upload.html
+9. **CSP nonce theft via cached response / dangling markup** — A strict nonce-CSP is defeated when the nonce is *predictable, reused, or leakable*: a cached HTML response served to multiple users repeats the same `nonce=`, so an attacker who reads it once can craft an inline `<script nonce=...>` that any victim's browser accepts; or a dangling-markup / CSS-attribute-selector leak exfiltrates the per-response nonce char-by-char, after which an HTML-injection point becomes full script execution. Check: is the nonce truly per-response-random, and is the nonce'd page ever cached (CDN, disk, back-forward cache)? A nonce that survives caching is not a nonce. Source: https://portswigger.net/research/bypassing-csp-with-dangling-iframes
+
+---
+
 ## Chain Table
 
 | DOM finding | Chain to | Impact |

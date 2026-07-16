@@ -296,6 +296,43 @@ done
 
 ---
 
+## Phase 9 — CDN re-fronting to bypass origin IP-allowlisting / WAF (2024-2026)
+
+Shared CDNs route origin fetches from a **common IP pool**, so an origin that "only trusts CDN IPs" trusts *every* customer of that CDN — including you.
+
+- **Technique:** create your **OWN** distribution on the same CDN (Cloudflare/CloudFront/Fastly) pointed at the victim origin. Requests sent through *your* distribution reach the origin from a "trusted" CDN IP but **skip the victim's WAF / rate-limit / auth rules** that are only enforced on the victim's own distribution. Tool: [`cdn-proxy`](https://github.com/RyanJarv/cdn-proxy).
+- **Prerequisite:** you need the **origin IP**. Chain with leaked-origin recon — DNS history (SecurityTrails/`crt.sh` pre-CDN records), SPF includes, CSP `connect-src` hosts, hardcoded asset references, and misconfigured non-CDN subdomains that share the origin.
+- **Impact / severity:** bypasses the entire edge security layer (WAF signatures, geo-blocks, rate limits, edge auth) → whatever the origin exposes when it believes the request is CDN-trusted. High when it reaches otherwise-blocked functionality; validate by showing a request that the edge blocks succeeding via your re-fronting distribution.
+
+Source: https://github.com/RyanJarv/cdn-proxy
+
+---
+
+## Phase 10 — HTTP/2 CONNECT multiplexed internal port scanning (flomb, Sep 2025)
+
+A permissive HTTP/2 proxy that honours the `CONNECT` method becomes an **SSRF-like internal recon primitive** — and because HTTP/2 multiplexes many streams over ONE connection, you scan a whole internal range from a single TCP/TLS session, which slips past connection-count-based monitoring/rate-limits.
+
+- **Technique:** open one HTTP/2 connection to the target proxy and send a separate `CONNECT` request per stream, each with `:authority` set to a different internal `ip:port`. Read the per-stream outcome:
+  - `:status 200` → **port OPEN** (proxy established the tunnel).
+  - `:status 503` followed by `RST_STREAM` with error code `CONNECT_ERROR` → **port CLOSED / unreachable**.
+- **Confirmed affected (as of the research):** Envoy ≥ 1.35, Apache httpd ≥ 2.4.65 acting as forward/permissive proxies. Fingerprint the edge (`Server:` header, ALPN `h2`) before firing.
+- **Impact / severity:** internal network + service enumeration behind the edge (the same blast-radius as blind SSRF port-scanning) → **Medium–High** when it reveals internal hosts/services that then chain to an SSRF/auth-bypass finding. Prove it by showing the 200-vs-503/`CONNECT_ERROR` split for a known-open vs known-closed internal port.
+- **Tooling:** a raw HTTP/2 client that lets you set `:method: CONNECT` + `:authority` per stream (e.g. `nghttp`/`h2load`-style clients, or a small Python `h2` script); ordinary curl won't multiplex arbitrary CONNECT streams for you.
+- Source: https://blog.flomb.net/posts/http2connect/
+
+---
+
+## Phase 11 — MadeYouReset — HTTP/2 server-initiated stream-reset DoS (Gal Barnahum, 2025)
+
+The successor to Rapid Reset (CVE-2023-44487). Where Rapid Reset had the **client** cancel streams, MadeYouReset coerces the **SERVER** to reset streams *after* they've been admitted — so the streams no longer count against the `SETTINGS_MAX_CONCURRENT_STREAMS` limit, letting the attacker keep far more work in flight than the negotiated cap and exhaust CPU/memory on the origin. Multiple 2025 CVEs across HTTP/2 stacks.
+
+- **⚠️ SCOPE GATE — read before testing:** this is a Layer-7 **Denial-of-Service** technique. DoS/resource-exhaustion is **explicitly OUT OF SCOPE on the large majority of bug-bounty programs.** Do NOT run a MadeYouReset PoC against a live target unless the program's scope *specifically* permits DoS testing — confirm in writing and quote the in-scope line. Absent that, treat it as **fingerprint-only**: identify the vulnerable HTTP/2 stack + version and report the *known-CVE exposure* (no traffic-generating PoC), or skip entirely.
+- **What it looks like:** the attacker sends a malformed/edge-case frame (e.g. an invalid window update, a stream-error trigger) that makes the server itself emit `RST_STREAM`, freeing the concurrency slot while the request's work is still queued — repeat at volume.
+- **Severity reality:** even where in scope, L7-DoS typically pays low/Info and is often closed as OOS — the value here is mostly **defensive fingerprinting** (flag an unpatched HTTP/2 stack) rather than an exploited PoC.
+- Source: https://galbarnahum.com/posts/made-you-reset-technical-details
+
+---
+
 ## Chain Table
 
 Severities below are calibrated to what triage actually accepts. They are deliberately conservative; do not inflate them in a report.

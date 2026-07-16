@@ -323,6 +323,20 @@ XXE classic payloads (`<!ENTITY xxe SYSTEM "file://...">`) are not universally e
 
 ---
 
+## Recent (2025) techniques
+
+### Server-side document/PDF-render XXE → SSRF + file read
+Any "export to PDF", "generate report", "download as document", or "preview" feature that renders user-influenced XML/HTML/SVG server-side is a live XXE surface — the render pipeline (wkhtmltopdf/headless-chrome-with-XML, Apache FOP, LibreOffice/`unoconv`, PhantomJS, XSL-FO, ImageMagick-SVG) parses XML before rendering. Feed it a document whose XML parts carry a DOCTYPE/parameter-entity DTD (as in the SVG/DOCX payloads above) and read local files or reach `http://169.254.169.254/` from the render worker.
+- **Bypass path-traversal mitigations with URL-encoding**: where the target normalizes `../` in the entity path, try encoded (`%2e%2e%2f`), double-encoded, or absolute `file://` paths — the render pipeline often decodes AFTER the traversal filter runs.
+- **Chain to phar deserialization (PHP)**: an XXE/SSRF that can point a stream at an attacker-staged file can trigger `phar://` unserialize on PHP metadata-reading sinks (e.g. an SVG/image passed to `getimagesize`/`file_exists`), turning file-fetch into object-injection → RCE. Test every doc/PDF-render feature, not just the obvious `/upload` endpoint. Source: https://swarm.ptsecurity.com/blind-trust-in-the-cloud/
+
+### "Impossible XXE in PHP" — libxml2 param-entity + PHP stream wrappers to defeat `LIBXML_NONET`
+When the app sets `LIBXML_NONET` (no external network fetches) and disables `file://` — the config normally considered "XXE-safe" — you can STILL exfiltrate multi-line files. Chain libxml2's parameter-entity expansion with a PHP stream wrapper that IS allowed:
+- Use `php://filter/…/resource=` to base64-encode the target file (survives newlines/binary that would otherwise break entity parsing), then exfil the encoded blob.
+- Where `LIBXML_NONET` blocks `http://`, route the OOB over **UNC/SMB** (`\\attacker\share\`) or a wrapper libxml2 still honors, so the parameter-entity callback leaks the file even with "no network" set. This defeats the assumption that `LIBXML_NONET` + `file://`-block = safe. Source: https://swarm.ptsecurity.com/impossible-xxe-in-php/
+
+---
+
 ## Gate 0 Validation
 
 Before writing the report, answer all three:

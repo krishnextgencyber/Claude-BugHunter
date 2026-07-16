@@ -286,6 +286,34 @@ Microsoft's `ConvergedConditionalAccess` page (PageID in source) is the definiti
 
 ---
 
+## OAuth device-code phishing (Storm-2372) — standing test
+
+The `device_authorization` grant is a first-class MFA/CA bypass path, not just a phishing footnote. The attacker initiates the device-code flow, then sends the victim the **legitimate** IdP verify URL (`https://microsoft.com/devicelogin`) + a `user_code`; the victim approves in their own already-MFA'd session, and the attacker polls `/token` and receives a fully **MFA-satisfied** refresh/access token. Auth is decoupled from the originating session, so MFA and Conditional Access don't bind to the attacker's device.
+
+**Standing test on any Entra tenant:** is the device-code grant enabled, and is `user_code` entry unbound to the origin session? Request a device code, and check whether the resulting token is usable from a completely separate device/IP.
+
+```bash
+# 1) Attacker starts the device flow (Graph PowerShell client_id)
+curl -s -X POST https://login.microsoftonline.com/common/oauth2/v2.0/devicecode \
+  -d 'client_id=1b730954-1685-4b74-9bfd-dac224a7b894&scope=openid profile offline_access'
+#   → returns device_code, user_code, verification_uri (microsoft.com/devicelogin)
+# 2) Victim approves at the LEGIT verification_uri with the user_code (social-engineered)
+# 3) Attacker polls /token with the device_code until it flips from
+#    authorization_pending → an MFA-satisfied access_token + refresh_token.
+```
+
+Note the current-reality shift: Salesforce killed the device-code flow entirely in Sept 2025 after Storm-2372 abuse. If a tenant/app still exposes it, flag the exposure. Source: https://www.proofpoint.com/us/blog/threat-insight/access-granted-phishing-device-code-authorization-account-takeover
+
+---
+
+## Recent Entra token-abuse research (2025) — standing awareness
+
+1. **Actor-token cross-tenant impersonation (CVE-2025-55241)** — Undocumented backend service-to-service "Actor tokens" minted in a tenant *you control* were accepted by the legacy **Azure AD Graph** API, which failed to validate the token's *source* tenant → impersonate any user (incl. Global Admin) in **any** tenant, no pre-access, bypassing MFA/CA, with **zero sign-in logs in the victim tenant**. Patched by Microsoft, but the pattern generalizes: any legacy/S2S API that skips issuer/tenant binding on a self-minted token. Source: https://dirkjanm.io/obtaining-global-admin-in-every-entra-id-tenant-with-actor-tokens/
+2. **nOAuth — OIDC email-claim account takeover on Entra-federated SaaS** — A third-party app that federates "Sign in with Microsoft/Entra" and keys accounts on the **`email` claim** (mutable, not `oid`/`sub`) is takeover-able: an attacker sets the `mail` attribute of an Entra account they control to the victim's email, signs in via Entra to the SaaS, and is matched to the victim's existing account. Widespread (Microsoft flagged hundreds of SaaS apps in 2025). Test every "Sign in with Microsoft" integration: does it merge on unverified `email` rather than the immutable `oid`? Source: https://www.descope.com/blog/post/noauth
+3. **Primary Refresh Token (PRT) theft on a joined device → SSO everywhere** — Once you have local admin on an Entra-joined host, the PRT (+ its session key in the TPM) mints tokens for any first-party resource, satisfying device-compliance CA. Post-compromise, but it is why "device compliant" CA is not a boundary against a compromised endpoint. Source: https://dirkjanm.io/digging-into-primary-refresh-tokens-and-windows-hello/
+
+---
+
 ## Active-attacker detection via lockout differential
 
 If you see `AADSTS50053` (LOCKED) on multiple users despite your 1-attempt-per-user cap:

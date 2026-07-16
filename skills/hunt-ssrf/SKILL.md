@@ -415,6 +415,45 @@ The following real, verified bug-bounty / coordinated-disclosure cases extend th
 
 ---
 
+## Renderer-as-SSRF-sink (HTML-to-PDF / headless browser)
+
+Any "export to PDF", "render HTML", "screenshot this URL", or "preview" feature that runs a renderer server-side is an SSRF sink that's routinely missed because the input is HTML, not a URL field.
+
+- **HTML-to-PDF engines** (`wkhtmltopdf`, WeasyPrint, Prince, dompdf): inject `<iframe src="http://169.254.169.254/latest/meta-data/">`, `<img src>`, `<link>`, or `<object>` into any field that lands in the rendered document → metadata/internal-host fetch baked into the PDF. `wkhtmltopdf` also honours `file:///etc/passwd` → local file read into the PDF.
+- **Headless Chrome/Chromium** (Puppeteer, Playwright, `chrome --headless`): the renderer executes JS, so beyond passive fetches you get `fetch()`/`XHR` to internal services, multi-request chaining, and reading responses back into the rendered output. Test with JS that exfiltrates internal responses to your OOB host.
+- **Detection:** invoice/report/badge/certificate generators, "print", chart/diagram renderers, link-unfurl/preview cards, og-image services. A blind hit is confirmed via `interactsh`/Collaborator; a returned-content hit shows the internal response embedded in the PDF/image.
+
+Escalate the same way as any SSRF — cloud metadata (`cloud-iam-deep`), internal admin, `file://` read.
+
+## 0.0.0.0 Day — browser SSRF to localhost
+
+Distinct from server-side SSRF: a malicious **public web page** reaches services bound to the victim's `localhost`. Chrome/Safari/Firefox historically let a public origin `fetch("http://0.0.0.0:<port>/")` in `no-cors` mode, and the OS routes `0.0.0.0`→`127.0.0.1` — and `0.0.0.0` was omitted from CORS/Private-Network-Access local ranges (Oligo, Aug 2024).
+
+- **Impact:** public-site → localhost dev/infra services: port-fingerprinting and RCE where the local service is vulnerable (demonstrated vs Ray/ShadowRay, Selenium Grid, TorchServe). It's an *access primitive*, no CVE of its own.
+- **Where it still bites:** browsers now block `0.0.0.0` (Chrome 128→133, WebKit iOS18/Sequoia) but **Firefox deferred** the fix — frame it as legacy-browser / Firefox-relevant, and as a model for testing any localhost-bound dev service exposed to a web origin.
+- Note: this is the *browser* threat model — distinct from the server-side `http://0/`, `http://0.0.0.0`, decimal/octal IP bypasses in the IP-bypass table above.
+
+Source: https://www.oligo.security/blog/0-0-0-0-day-exploiting-localhost-apis-from-the-browser
+
+---
+
+## Modern SSRF frontier (2024-2026) — parser differentials, CDN edge-fetchers, CDP takeover
+
+Beyond the IP-encoding bypass table, three current classes:
+
+- **URL-parser differential SSRF (validator vs fetcher disagree on host).** The allowlist parser and the fetch client extract *different* hosts from the same bytes, so validation passes for `good.tld` while the fetch hits the attacker host. Payloads: `http://evil.tld\@good.tld` (backslash-userinfo split), `http://good.tld:80:80/` (double-port → WHATWG `canParse()` returns false so the allowlist check is **SKIPPED**, then a lenient parser fetches — a **fail-open** on `canParse()`), plus tabs/newlines and unmatched `[]`. Language table: PHP/Java parse RFC-style (host = `b.tld`), Node/WHATWG the other way (host = `a.tld`) — pick the payload that splits *your* target's validator↔fetcher pair. This is the modern frontier past the IP-encoding tricks. Source: https://www.sonarsource.com/blog/security-implications-of-url-parsing-differentials/
+- **CDN `/cdn-cgi/image/` (edge-fetcher) normalization SSRF.** Cloudflare / OpenNext image-resize endpoints act as server-side fetchers. `/cdn-cgi\image/https://internal` evades edge interception, then the JS `URL` class normalizes `\`→`/` and fetches the attacker URL (**CVE-2026-3125**). A CDN convenience feature becomes SSRF via a path-normalization differential. Source: https://github.com/advisories/GHSA-c7mq-gh6q-6q7c
+- **Headless-browser / PDF-render SSRF → Chrome DevTools (`:9222`) takeover.** (Extends the Renderer-as-SSRF-sink section.) An HTML→PDF/PNG renderer (Puppeteer/Playwright/wkhtmltopdf) executes attacker HTML server-side; inject `<iframe>` / `fetch()` to hit internal services, and critically target the headless-Chrome DevTools endpoint `http://localhost:9222/json` — it **lists open tabs with their session-token-bearing URLs**, escalating a blind renderer-SSRF into full JS-in-browser exfil + session theft. Source: https://medium.com/@ibtissamhammadi1/how-i-turned-a-headless-browser-into-a-critical-ssrf-goldmine-57b37235af0f
+- **Blind→visible SSRF via HTTP redirect loops (turns "unexploitable blind" into credential exfil).** When the app fetches your URL but never returns the body — normal JSON/content parsing rejects a metadata response, so the SSRF looks dead — point the SSRF at an attacker server that redirects with **INCREMENTING status codes** (`301`→`302`→…→`310`+, ~10 hops) and only then `Location:`-hops to the real target (e.g. `http://169.254.169.254/latest/meta-data/iam/security-credentials/`). The abnormal/monotone-incrementing redirect chain flips the app into an error-handling path that **leaks the full redirect chain plus the final 200 body** that the happy-path parser would have discarded → exfiltrates the AWS IAM creds from an SSRF that was otherwise blind and unexploitable. Ranked #3 in Assetnote/slcyber's Top-10 Web-Hacking-Techniques 2025 (Shubham Shah). Test: stand up a redirect server that walks 301..310 then 30x→IMDS; watch for the metadata body surfacing in the error/response. Source: https://slcyber.io/research-center/novel-ssrf-technique-involving-http-redirect-loops/
+- **Container / serverless credential endpoints — the IMDS variants most write-ups miss.** EC2 `169.254.169.254` IMDS is only ONE metadata source; on containerized/serverless hosts the live creds live elsewhere and are skipped if you only try EC2. Enumerate all of them on any confirmed SSRF:
+  - **AWS ECS task role:** `http://169.254.170.2$AWS_CONTAINER_CREDENTIALS_RELATIVE_URI` — the relative-URI path is per-task; also try the full-URI form served on `169.254.170.2/v2/credentials/<uuid>`. Returns temporary role creds even when IMDS is firewalled off the container.
+  - **AWS Lambda:** runtime creds are injected as env vars, not a metadata IP — pivot the SSRF/RCE toward reading env (`AWS_ACCESS_KEY_ID`/`AWS_SESSION_TOKEN`), and the Lambda runtime API `http://<AWS_LAMBDA_RUNTIME_API>/2018-06-01/runtime/invocation/next`.
+  - **GCP:** `http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token` with header `Metadata-Flavor: Google` (works on GKE/Cloud Run/GCE).
+  - **Azure:** `http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https://management.azure.com/` with header `Metadata:true` (managed-identity token).
+  When EC2 IMDS returns nothing (IMDSv2-enforced or non-EC2), rotate through ECS/Lambda/GCP/Azure before concluding "no creds reachable."
+
+---
+
 ## Related Skills & Chains
 
 - **`cloud-iam-deep`** — SSRF is the canonical entry to cloud metadata service. Chain primitive: SSRF → IMDSv1 token theft → `cloud-iam-deep` privilege escalation reaches `iam:CreateUser` / `sts:AssumeRole` on cross-account roles.

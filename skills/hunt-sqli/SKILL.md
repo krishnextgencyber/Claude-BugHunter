@@ -387,6 +387,19 @@ The following real, verified bug-bounty / CVE / coordinated-disclosure cases ext
     - Root cause: invite-code lookup built a raw SQL string against the proxy's Postgres DB; developers assumed the code was short/opaque and skipped parameter binding
     - Year: 2023 — Mozilla H1 bounty (amount redacted in disclosure)
 
+13. **PHP PDO — SQLi *inside* emulated prepared statements** ([Assetnote / searchlight-cyber research, Adam Kues, Jul 2025](https://slcyber.io/research-center/a-novel-technique-for-sql-injection-in-pdos-prepared-statements/))
+    - Subclass: SQLi where devs assumed "prepared statement = safe" — PHP PDO with `PDO::ATTR_EMULATE_PREPARES` **(the DEFAULT)** parses the SQL client-side itself, imperfectly, so placeholders can be injected/broken from user-controlled fragments interpolated into the query template
+    - How it works: the emulated parser tracks quoting/identifier state to know where `?`/`:name` placeholders are. A **null byte inside a backtick-quoted identifier** makes it backtrack — a *following* `?` is then treated as a **PHANTOM placeholder** (shifts the parameter count); and `\'` quirks let you break out of quoting. Hit hardest on **column/table-name interpolation** (which can't be bound anyway), on **Postgres**, and on **PHP ≤ 8.3**.
+    - Probes (against an endpoint that interpolates user input into a `` `column` ``/`` `table` `` position of a PDO prepared query):
+      ```
+      col=%00          → SQL/PDO error (parser desync on the null byte)
+      col=?%23%00      → "Invalid parameter number" (proves a phantom placeholder was injected via ? + `#` comment + null)
+      col=\?%23%00     → UNION now works (quote-escape breakout → real injection)
+      ```
+    - Root cause: `EMULATE_PREPARES` on by default; developers treat any `PDO::prepare()` as injection-proof and freely concatenate identifiers/sort columns into the template. Fix = `setAttribute(PDO::ATTR_EMULATE_PREPARES, false)` + strict identifier allowlisting.
+    - Why it matters: turns "we use prepared statements" audit rows back into live SQLi leads — always test column/sort/table params on PHP+PDO stacks even when the query is a `prepare()`.
+    - Year: 2025
+
 ---
 
 ## Related Skills & Chains

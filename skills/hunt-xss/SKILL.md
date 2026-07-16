@@ -392,6 +392,14 @@ Cross-references:
 
 ---
 
+## Recent XSS / injection research (2024-2026)
+
+1. **Fontleak — CSS-only text-node exfiltration via ligature fonts + container queries** — A crafted font maps each candidate char-sequence to a wide glyph; a `@container`/scroll-width query fires a background-image request only when the ligature renders, and sequential `@import` chaining iterates indices to leak full text (e.g. CSRF tokens) with NO JS — works where CSP allows styles but blocks script. Modern upgrade from single-char attribute-selector leaks to fast full-text-node exfil. Source: https://adragos.ro/fontleak/
+2. **Salesforce Aura `aura.tag` mXSS with content-type coercion** — On Experience Cloud sites, `/s/sfsites/aura?...` reflects `aura.tag` with a `[COMPONENT]` suffix, and `aura.format=JSON` makes the endpoint respond `text/html` instead of `application/json`; an `<svg onload=...>` in `aura.tag` then executes — a near-templated XSS across the huge Aura/Experience-Cloud install base. Source: https://xbow.com/blog/xbow-salesforce-xss
+3. **"Make Self-XSS Great Again" — promoting self-XSS to cross-user via login/logout CSRF + credentialless iframe** — A self-XSS that only fires in the *attacker's own* authenticated view becomes a real cross-user finding: force the victim's browser into the *attacker's* session (login-CSRF: auto-submit a login form with attacker creds, or cookie-forcing), trigger the self-XSS payload stored on that account, and use it to exfiltrate anything the victim then types/pastes (their own credentials on the phished-looking page) or to pivot; a `credentialless` iframe lets the payload run cross-site without the victim's cookies interfering. Turns a routinely-rejected "self-XSS = won't fix" into ATO-adjacent impact. Always ask of a self-XSS: can I put the victim in my session and can that payload capture *their* secret? Source: https://blog.slonser.info/posts/make-self-xss-great-again/
+
+---
+
 ## Related Skills & Chains
 
 - **`hunt-cache-poison`** — Reflected XSS becomes stored-equivalent at CDN scale when the vulnerable parameter is unkeyed. Chain primitive: `X-Forwarded-Host: attacker.com` poisons a cached response whose `<script src=...>` now points at attacker.com → every CDN-edge visitor executes attacker JS without any per-victim interaction.

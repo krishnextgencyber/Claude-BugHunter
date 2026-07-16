@@ -1,6 +1,6 @@
 ---
 name: hunt-csrf
-description: Hunting skill for csrf vulnerabilities. Built from 15 public bug bounty reports including modern variants — SameSite=Lax sibling-subdomain bypass (Argo CD CVE-2024-22424), GraphQL mutations-via-GET (GitLab $3,370), framework-wide CSRF middleware disabled (Stripe Dashboard $5,000), path-traversal CSRF-token bypass (GitHub Enterprise CVE-2022-23732 $10k), Origin-omission bypass (TikTok $2,500), OAuth-state null-byte (Streamlabs), WebSocket CSRF / CSWSH (Coda), default-SameSite email-change → ATO (YoYo Games $400), social-account-link CSRF (HackerOne), JSON-CSRF via text/plain on email-change (TikTok $500). Use when hunting modern CSRF — heavy emphasis on chain-to-ATO patterns.
+description: Hunting skill for csrf vulnerabilities. Built from 15 public bug bounty reports including modern variants — CSPT2CSRF / Client-Side Path Traversal → CSRF (the "CSRF is not dead" class that survives SameSite + anti-CSRF tokens; Grafana CVE-2025-4123/CVE-2025-6023, Meta $111,750), SameSite=Lax sibling-subdomain bypass (Argo CD CVE-2024-22424), GraphQL mutations-via-GET (GitLab $3,370), framework-wide CSRF middleware disabled (Stripe Dashboard $5,000), path-traversal CSRF-token bypass (GitHub Enterprise CVE-2022-23732 $10k), Origin-omission bypass (TikTok $2,500), OAuth-state null-byte (Streamlabs), WebSocket CSRF / CSWSH (Coda), default-SameSite email-change → ATO (YoYo Games $400), social-account-link CSRF (HackerOne), JSON-CSRF via text/plain on email-change (TikTok $500). Use when hunting modern CSRF — heavy emphasis on chain-to-ATO patterns.
 sources: github, hackerone_public, bugcrowd_public, github_security_advisories
 report_count: 15
 ---
@@ -194,6 +194,14 @@ curl -s https://monitoring.target.com/api/health | jq '.version'
 ### Defense: SameSite=Lax cookies
 **Bypass:** Top-level navigation GET requests still work. If the sensitive action can be triggered via GET (or if a redirect chain converts POST→GET), Lax doesn't protect it. Also: subdomains can still set cookies for parent domain.
 
+### Defense: SameSite — modern bypasses (commonly missed — HackTricks CSRF / hazanasec / PortSwigger)
+**Bypasses:**
+- **HTTP method override → downgrade POST to a Lax-allowed GET (or reach an unprotected verb).** Many frameworks honor `_method=PUT/DELETE` form field or `X-HTTP-Method-Override` / `X-HTTP-Method` / `X-Method-Override` headers. Send a top-level-nav **GET** (Lax sends the cookie) carrying `?_method=POST` so the server processes it as the state-changing action → SameSite=Lax bypassed. (Symfony/Laravel/Rails/Spring patterns.)
+- **Lax-by-default 2-minute window:** a cookie set WITHOUT an explicit `SameSite` attribute is Lax-by-default in Chrome, BUT is still sent on **cross-site top-level POST for the first ~120 s** after issuance ("Lax+POST"). If you can make the victim re-auth/refresh then auto-submit within the window, a normal POST-CSRF works. Cookies with explicit `SameSite=None` are always cross-site.
+- **SameSite is *site* not *origin* (cousin/sibling domain):** any `*.target.com` you control (subdomain XSS, subdomain takeover, or a shared sandbox host) is "same-site" → its requests carry the cookie, defeating `Strict`/`Lax`. Pairs with `hunt-subdomain`.
+- **CORS-reflective-origin → CSRF-equivalent (token-less write):** if the API reflects `Origin` + `Access-Control-Allow-Credentials: true` and the session cookie is `SameSite=None`, an attacker page does `fetch(url,{method:'POST',credentials:'include'})` to perform credentialed state-changing writes (and read the response) — no CSRF token needed. Cross-ref `hunt-cors`. (This is how a "wildcard credentialed CORS" becomes a CSRF/ATO primitive.)
+- **GraphQL CSRF:** GraphQL endpoints that accept `GET` queries or `application/x-www-form-urlencoded`/`text/plain` bodies (no enforced `application/json`) are CSRF-able even for mutations.
+
 ### Defense: CSRF token present
 **Bypasses:**
 - Token is static per session — steal via XSS, Referer leakage, or cached page
@@ -311,6 +319,40 @@ No Duende.BFF-direct CVE exists as of 2026-05. The three classes above are **des
 3. From a low-priv session, replay admin-partition POSTs with `X-CSRF: 1` to confirm no per-role token binding.
 4. Enumerate SignalR/WS hubs (`/hubs/*`, `/signalr/*`) — open without `X-CSRF`; if 101 Switching Protocols, CSWSH-style attacks viable.
 5. Subdomain inventory + DNS-takeover scan for any `*.example.com` if BFF cookie has `Domain=.example.com`.
+
+---
+
+## CSPT2CSRF — Client-Side Path Traversal → CSRF (2024-2026: "CSRF is not dead")
+
+The modern answer to "CSRF is dead because of SameSite + tokens." **CSPT2CSRF** (Doyensec / Maxence Schmitt) needs neither a cross-site cookie send nor a stolen token — the exploit runs **from the target's own SPA**, so the browser attaches the session cookie *and* the anti-CSRF token itself. The vulnerability is a **Client-Side Path Traversal (CSPT)**: the SPA builds a `fetch`/`XHR`/`axios` request URL by concatenating a user-influenced value into the **path**, without normalizing it. Inject `../` / `..%2f` / double-encoded traversal into that value and you **re-point the already-authenticated same-origin request to a DIFFERENT state-changing API endpoint** of your choosing. The legitimate anti-CSRF token rides along on the request the app itself issued → token defence is moot.
+
+**Where the attacker-influenced path segment comes from** (the "source" you steer): a path/query/hash param the SPA reflects into a request path (`?id=`, `/#/items/<x>`), a value returned by an **open-redirect** the app follows into a fetch, a field read out of an **uploaded/imported JSON** the app then uses to build a URL, or any server response value the client trusts as a path component.
+
+**Sinks / impact tiers:**
+- **State-change (canonical CSPT2CSRF):** the traversed request is a token-less-*to-you* `POST/PUT/DELETE` the app fires with the victim's session+token → forge a privileged write (delete/create/grant, settings/email change → ATO).
+- **Reflected response into a DOM sink:** if the traversed GET's response body is written to `innerHTML`, you get **DOM-XSS** (cross-ref `hunt-dom`).
+- **OAuth-code / token leak:** traverse the request to an endpoint whose response contains an auth code or token, then exfil.
+
+### Signals & hunting
+```javascript
+// Grep authed bundles for string-concatenated request PATHS whose input is user-influenced:
+//   fetch(`/api/v1/items/${id}`)   axios.post('/api/'+type+'/save', body)   `/download/`+name
+grep -rnE "fetch\(|axios\.(get|post|put|delete)\(|XMLHttpRequest|\.open\(" recon/$TARGET/ --include="*.js" \
+  | grep -E '\+|\$\{|concat|path\.join'
+```
+1. Trace each concatenated path back to a `location.*` / route-param / query / imported-JSON / redirect-derived source (no `encodeURIComponent`, no normalization = candidate).
+2. In the live SPA, drive the feature and in Burp watch the outgoing request; inject `../` / `..%2f` / `%252e%252e%252f` in the source and confirm the request path **re-points** to a sibling API route.
+3. For the state-change tier, aim the traversal at a `POST/PUT/DELETE` route and confirm the server **honors** it with the victim's session+token attached (two identities to prove cross-user).
+4. Burp DOM-Invader flags some client path-concatenation flows; otherwise this is manual bundle review + Repeater.
+
+### Real cases
+- **Grafana CVE-2025-4123 / CVE-2025-6023** — client-side open-redirect + path-traversal loads an attacker-controlled **plugin's JS** in the victim's authenticated Grafana → XSS → ATO (chained CSPT). Even default configs affected.
+- **Meta $111,750** — chained CSPT2CSRF variant (one of the largest single CSPT payouts, cited in Schmitt's research).
+
+### Why it beats classic CSRF defences (state it in the report)
+SameSite (Strict/Lax/None) is irrelevant — the request is **same-origin, first-party**, issued by the app's own JS. Anti-CSRF tokens are irrelevant — the app **includes its own valid token**. Origin/Referer checks pass — the Origin *is* the target. The only real fix is normalizing/allow-listing the client-built path and never trusting a user-influenced value as a path segment.
+
+Sources: https://blog.doyensec.com/2024/07/02/cspt2csrf.html · https://medium.com/@renwa/client-side-path-traversal-cspt-bug-bounty-reports-and-techniques-8ee6cd2e7ca1 (cross-ref `hunt-dom` CSPT primitive, `client-side-browser-extension` CSPT section).
 
 ---
 

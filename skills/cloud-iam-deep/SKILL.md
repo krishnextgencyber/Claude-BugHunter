@@ -511,6 +511,14 @@ Cross-reference: `hunt-cloud-misconfig` → `CloudWatch RUM weaponization` cover
 
 ---
 
+## Recent cloud IAM privesc research (2024-2026)
+
+1. **Entra ID cross-tenant Actor-token impersonation (CVE-2025-55241)** — Undocumented backend S2S "Actor tokens" minted in your OWN tenant were accepted by the legacy Azure AD Graph API which failed to validate the token's source tenant, letting you impersonate any Global Admin in ANY tenant — no pre-access, bypassing MFA/Conditional Access, zero logs in the victim tenant. Generalizes: request a service token in a tenant you control, replay against a legacy API that skips issuer/tenant binding. Source: https://dirkjanm.io/obtaining-global-admin-in-every-entra-id-tenant-with-actor-tokens/
+2. **GCP "Tag Your Way In" — tagUser + IAM Conditions privesc** — IAM Conditions that gate a privileged binding on a resource tag can be satisfied by any principal holding `resourcemanager.tagUser` (+viewer): attach the matching tag via `tagBindings` to a resource and the conditional grant activates → full admin without ever editing an IAM policy. tagUser is widely handed to app/CI SAs. Tags-as-authorization-input. Source: https://www.mitiga.io/blog/tag-your-way-in-new-privilege-escalation-technique-in-gcp
+3. **GCP service-account impersonation CHAINS (implicitDelegation / TokenCreator)** — Beyond direct `getAccessToken`: if SA-A has `implicitDelegation` on SA-B and SA-B has `getAccessToken` on SA-C, A mints C's token transitively; enumerate multi-hop `serviceAccountTokenCreator`/`implicitDelegation` graphs to reach a high-priv SA from a leaked low-priv key. Source: https://jdsec.cloud/posts/2026-01-17-privilege-escalation-via-a-service-account-impersonation-chain/
+
+---
+
 ## Related Skills & Chains
 
 - **`hunt-ssrf`** — Most external paths to a cloud credential begin with SSRF reaching the metadata service. Chain primitive: SSRF + IMDSv1 → instance role token → `cloud-iam-deep` privilege-escalation patterns reach prod S3 / Secrets Manager.

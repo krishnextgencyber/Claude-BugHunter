@@ -217,6 +217,16 @@ trufflehog docker --image ORG/IMAGE:latest --only-verified
 
 ---
 
+## Recent CI/CD research (2024-2026)
+
+1. **GitHub Actions cache poisoning via cache-blasting + restore-key prefix collision** — Branch is the ONLY server-side trust boundary for the Actions cache; keys/versions are client-validated. Steal `ACTIONS_RUNTIME_TOKEN`+`CacheServerUrl` from runner `/proc/<pid>/mem` during a Pwn-request (valid 6h), stuff >10GB junk to force LRU eviction of legit entries, then re-upload a poisoned tar under the target key/version; a privileged branch workflow later blind-extracts it (overwriting `package.json`/preinstall) → RCE with its secrets. Source: https://adnanthekhan.com/2024/05/06/the-monsters-in-your-build-cache-github-actions-cache-poisoning/
+2. **Terraform speculative-plan RCE on PR (GitFlops)** — Automation platforms (TFC, Atlantis, Digger, env0, Terrateam) run `terraform plan` on untrusted PRs; a malicious `external` data source or a custom provider plugin executes arbitrary code AT PLAN TIME (plan is NOT read-only) → reverse shell with the pipeline's `AWS_*`/cloud env creds. Source: https://labs.snyk.io/resources/gitflops-dangers-of-terraform-automation-platforms/
+3. **workflow_run privilege-escalation + artifact poisoning** — A PR can modify its own `pull_request` workflow (even rewrite its `on:` trigger); the downstream `workflow_run` handler runs with full write-scope `GITHUB_TOKEN`+secrets and typically downloads the PR's artifact WITHOUT verifying contents → code exec in privileged context. Also ArtiPACKED: `GITHUB_TOKEN`/`ACTIONS_RUNTIME_TOKEN` accidentally packed into uploaded artifacts of public repos. Source: https://securitylab.github.com/resources/github-actions-new-patterns-and-mitigations/
+4. **GitLab CI_JOB_TOKEN cross-project pivot** — `CI_JOB_TOKEN` inherits the triggering user's API access; if a project's job-token allowlist is open it can pull another project's artifacts, container/package registry, releases, and (pre-17.1 default) authenticate to GraphQL — a leaked/over-scoped job token pivots across the whole group. GitLab-side equivalent of GITHUB_TOKEN abuse. Source: https://docs.gitlab.com/ci/jobs/ci_job_token/
+5. **GitHub Actions IssueOps / issue_comment TOCTOU** — `issue_comment`-triggered "ops" workflows (deploy/test-on-comment) approve a PR head, but the attacker force-pushes malicious code to the mutable `head.ref` between approval and checkout, so the privileged job runs attacker code. Same TOCTOU as label-gated runs. Source: https://securitylab.github.com/resources/github-actions-new-patterns-and-mitigations/
+
+---
+
 ## Grounded References (named cases / CVEs)
 
 - **Pwnrequest / `pull_request_target` class** — GitHub Security Lab (Jaroslav Lobačevski), "Keeping your GitHub Actions and workflows secure: Untrusted input." The original write-up of fork-PR secret exfil and the dangerous-checkout pattern.
